@@ -132,7 +132,6 @@ function Client.new(config)
   self.started = false
   self.bootstrap = config.bootstrap
   self.bootstrapOverride = config.bootstrapOverride ~= false
-  self.fetching = false
   self.hasPreviousStates = false
 
   self.eventEmitter = EventEmitter.new(self.loggerFactory)
@@ -164,21 +163,6 @@ function Client.new(config)
     factor = config.backoff and config.backoff.factor or 2,  -- exponential backoff
     jitter = config.backoff and config.backoff.jitter or 0.2 -- 20% jitter
   })
-
-  -- initialize asynchronously with a callback
-  self.ready = function(callback)
-    self:_init(function(err)
-      if err then
-        self.logger:error(tostring(err))
-
-        self.sdkState = "error"
-        self:_emit(Events.ERROR, err)
-        self.lastError = err
-      end
-
-      callback()
-    end)
-  end
 
   -- auto start
   if config.autoStart then
@@ -284,7 +268,8 @@ function Client:updateToggles(callback)
 
   callback = callback or function() end
 
-  -- 이미 한번이상 서버에서 플래그들을 가져온 상태일 경우에는 fetchToggles() 만 수행함.
+  -- 이미 한번이상 서버에서 플래그들을 가져온
+  -- 상태일 경우에는 fetchToggles() 만 수행함.
   if self.timerRunning or self.fetchedFromServer then
     self:_fetchToggles(callback)
     return
@@ -303,6 +288,7 @@ function Client:updateToggles(callback)
   end
 end
 
+-- fetch 중인 상태에서 updateContext()를 호출하게 되면 어떻게되나?
 function Client:updateContext(context, callback)
   if self.offline then
     return
@@ -322,7 +308,9 @@ function Client:updateContext(context, callback)
 
   self.context = Util.deepClone(staticContext, context)
 
-  self.logger:debugLambda(function() return "Context is updated: " .. Json.encode(self.context) end)
+  self.logger:debugLambda(function()
+    return "Context is updated: " .. Json.encode(self.context)
+  end)
 
   self:updateToggles(callback)
 end
@@ -452,108 +440,25 @@ function Client:start(callback)
     return
   end
 
-  -- 여기 depth가 너무 길다.
-  self.ready(function()
+  -- initialize asynchronously with a callback
+  -- bootstrapping?
+  self:_init(function(err)
+    if err then
+      self.logger:error(tostring(err))
+
+      self.sdkState = "error"
+      self:_emit(Events.ERROR, err)
+      self.lastError = err
+    end
+
+    -- initial fetch toggles
     self:_initialFetchToggles(function()
-      if self.refreshInterval > 0 then
-        self.timerRunning = true
-
-        self.timer:timeout(self.refreshInterval, function()
-          self:_fetchToggles(function(err)
-            if err then
-              local backoffSec = self.backoff:duration()
-
-              self.logger:warn(string.format(
-                "Fetch failed, retrying in %.2fs (attempt: %d)",
-                backoffSec, self.backoff.attempts
-              ))
-
-              -- 다음 호출까지 backoff 시간만큼 대기
-              self.timer:timeout(backoffSec, function()
-                self:_fetchToggles(function(err)
-                  if err then
-                    -- 오류가 계속 발생한 경우 backoff 시간을 증가시킴
-                    self.backoff:duration()
-                  else
-                    -- 성공 시 backoff 초기화된 상태로 유지
-                    self.backoff:reset()
-                  end
-                end)
-              end)
-            else
-              -- 성공 시 backoff 초기화
-              local backoffSec = self.backoff:reset()
-
-              self.timer:timeout(backoffSec, function()
-                self:_fetchToggles(function(err)
-                  if err then
-                    -- 오류가 계속 발생한 경우 backoff 시간을 증가시킴
-                    self.backoff:duration()
-                  else
-                    -- 성공 시 backoff 초기화된 상태로 유지
-                    self.backoff:reset()
-                  end
-                end)
-              end)
-            end
-          end)
-        end)
-
-        -- 타이머 루프 시작
-        -- self.timer:async(function()
-        --   while self.timerRunning do
-        --     -- 현재 시간 기록
-        --     local fetchStartTime = os.clock()
-        --     self.lastFetchStartTime = fetchStartTime
-
-        --     -- 토글 가져오기 (오류 처리 추가)
-        --     local fetchSuccess = false
-        --     self:_fetchToggles(function(err)
-        --       -- 오류 여부에 따라 backoff 처리
-        --       if err then
-        --         -- 오류 발생 시 backoff 시간 계산
-        --         local backoffMs = self.backoff:duration()
-        --         local backoffSec = backoffMs / 1000
-
-        --         self.logger:warn(string.format(
-        --           "Fetch failed, retrying in %.2fs (attempt: %d)",
-        --           backoffSec, self.backoff.attempts
-        --         ))
-
-        --         -- 다음 호출까지 backoff 시간만큼 대기
-        --         self.timer:sleep(backoffSec)
-        --       else
-        --         -- 성공 시 backoff 초기화
-        --         self.backoff:reset()
-
-        --         -- 가져오기 완료 후 다음 호출까지 대기 시간 계산
-        --         local fetchDuration = os.clock() - fetchStartTime
-        --         local nextInterval = math.max(0.1, self.refreshInterval - fetchDuration)
-
-        --         self.logger:debugLambda(function()
-        --           return string.format("Fetch completed in %.2fs, next fetch in %.2fs",
-        --             fetchDuration, nextInterval)
-        --         end)
-
-        --         -- 다음 호출까지 대기
-        --         self.timer:sleep(nextInterval)
-        --       end
-        --     end)
-
-        --     -- 타이머가 중지되었는지 확인
-        --     if not self.timerRunning then
-        --       break
-        --     end
-        --   end
-        -- end)
-      end
-
       self.logger:info("Client is started. (environment=`" .. self.context.environment .. "`)")
 
-      callback()
-    end)
+      self.metricsReporter:start()
 
-    self.metricsReporter:start()
+      callback()
+      end)
   end)
 end
 
@@ -632,9 +537,14 @@ function Client:_countSuccess()
 end
 
 function Client:_timedFetch(interval)
-  if interval > 0 and self.mode.type == "polling" then
-    -- TODO
-  end
+  self.logger:info("Timed fetching toggles in " .. interval .. " seconds.")
+
+  -- TODO
+  -- if refresh > 0 and self.mode.type == "polling" then
+    self.timer:timeout(interval, function()
+      self:_fetchToggles(function(err) end)
+    end)
+  -- end
 end
 
 function Client:stop()
@@ -647,9 +557,11 @@ function Client:stop()
     return
   end
 
+  -- timeout context를 가지고 있다가, 그걸로 중지처리하던지..
+  -- 그냥 모두 중지 처리하던지...
   if self.timerRunning then
     self.timerRunning = false
-    self.timer:tick()
+    self.timer:removeAll() -- 모든 timer callback을 강제 취소시킴
   end
 
   self.metricsReporter:stop()
@@ -827,8 +739,7 @@ function Client:_storeLastRefreshTimestamp(callback)
       key = contextHash,
       timestamp = self.lastRefreshTimestamp
     }
-    -- TODO sessionId를 앞에 붙이는게 맞는건가?
-    self.storage:save(self.context.sessionId .. "-" .. LAST_UPDATE_KEY, lastUpdateValue, callback)
+    self.storage:save(LAST_UPDATE_KEY, lastUpdateValue, callback)
   else
     callback()
   end
@@ -841,6 +752,8 @@ function Client:_initialFetchToggles(callback)
       self:_setReady()
     end
 
+    self:_timedFetch(self.refreshInterval)
+
     callback()
     return
   end
@@ -849,8 +762,6 @@ function Client:_initialFetchToggles(callback)
 end
 
 function Client:_fetchToggles(callback)
-  self.fetching = true
-
   local isPOST = self.usePOSTrequests
   local url = isPOST and self.url or Util.urlWithContextAsQuery(self.url, self.context)
   local body = isPOST and Json.encode({ context = self.context }) or nil
@@ -863,11 +774,11 @@ function Client:_fetchToggles(callback)
     headers["Content-Length"] = body and #body or 0
   end
 
-  self.logger:debugLambda(function() return "Fetch feature flags: " .. Json.encode(Util.urlDecode(url)) end)
+  self.logger:debugLambda(function()
+    return "Fetch feature flags: " .. Json.encode(Util.urlDecode(url))
+  end)
 
   self.request(url, method, headers, body, function(response)
-    self.fetching = false
-
     if self.sdkState == "error" and response.status < 400 then
       self.sdkState = "healthy"
       self:_emit(Events.RECOVERED)
@@ -904,6 +815,8 @@ function Client:_fetchToggles(callback)
         end)
 
         self.storage:save(ETAG_KEY, self.etag)
+
+        self:_timedFetch(self.refreshInterval)
       end)
     elseif response.status == 304 then
       self.logger:debugLambda(function()
@@ -922,6 +835,8 @@ function Client:_fetchToggles(callback)
       self:_storeLastRefreshTimestamp(function()
         callback() -- 304도 성공으로 처리
       end)
+
+      self:_timedFetch(self.refreshInterval)
     else
       if response.status <= 0 then
         self.logger:warn("Fetching flags did not have an OK response: " .. response.status)
@@ -933,6 +848,9 @@ function Client:_fetchToggles(callback)
       local errorObj = { type = "HttpError", code = response.status }
       self:_emit(Events.ERROR, errorObj)
       self.lastError = errorObj
+
+      local nextFetch = self:_handleErrorCases(url, response.status)
+      self:_timedFetch(nextFetch)
 
       callback(errorObj) -- 오류 객체 전달
     end

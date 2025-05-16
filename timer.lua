@@ -79,6 +79,10 @@ function Timer:remove(ctx)
   ctx.remove = true
 end
 
+function Timer:removeAll()
+  self.timers = {}
+end
+
 function Timer:tick()
   local now = os.clock()
   while #self.timers > 0 do
