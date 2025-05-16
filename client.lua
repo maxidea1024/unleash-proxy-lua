@@ -157,15 +157,15 @@ function Client.new(config)
   })
 
   -- backoff 설정
-  self.backoff = Backoff.new({
+  self.backoffParams = {
     min = config.backoff and config.backoff.min or 1,        -- 1초부터 시작
     max = config.backoff and config.backoff.max or 10,       -- 10초까지 증가
     factor = config.backoff and config.backoff.factor or 2,  -- exponential backoff
     jitter = config.backoff and config.backoff.jitter or 0.2 -- 20% jitter
-  })
+  }
 
   -- auto start
-  if config.autoStart then
+  if config.disableAutoStart ~= true then
     self.logger:info("Starting automatically...")
     self:start()
   end
@@ -384,6 +384,8 @@ function Client:_setReady()
 end
 
 function Client:_init(callback)
+  self.logger:debug("Try bootstrapping...")
+
   self:_resolveSessionId(function(sessionId)
     self.context.sessionId = sessionId
 
@@ -532,6 +534,16 @@ function Client:_handleRecoverableError(url, statusCode)
 end
 
 function Client:_nextFetch()
+  -- local ms = self.min * math.pow(self.factor, self.attempts)
+  -- self.attempts = self.attempts + 1
+
+  -- if self.jitter > 0 then
+  --   local rand = math.random() * 2 - 1
+  --   ms = ms + rand * self.jitter * ms
+  -- end
+
+  -- return math.min(ms, self.max)
+
   -- TODO 지수, jitter처리
   return self.refreshInterval + self.failures * self.refreshInterval
 end
@@ -756,6 +768,8 @@ function Client:_storeLastRefreshTimestamp(callback)
 end
 
 function Client:_initialFetchToggles(callback)
+  self.logger:debug("Initial fetching toggles...")
+
   if self:_isUpToDate() then
     if not self.fetchedFromServer then
       self.fetchedFromServer = true
