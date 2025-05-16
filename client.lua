@@ -494,7 +494,7 @@ function Client:_handleConfigurationError(url, statusCode)
 end
 
 function Client:_handleRecoverableError(url, statusCode)
-  local nextFetch = self:_backoff()
+  local nextFetchDelay = self:_backoff()
 
   if statusCode == 429 then -- too many request
     self:_emit(Events.ERROR, {
@@ -502,7 +502,7 @@ function Client:_handleRecoverableError(url, statusCode)
       message = url ..
       " responded " ..
       statusCode ..
-      " which means you are being rate limited. Stopping refresh of toggles for " .. nextFetch .. " seconds",
+      " which means you are being rate limited. Stopping refresh of toggles for " .. nextFetchDelay .. " seconds",
       code = statusCode,
     })
   elseif statusCode == 404 then -- not found
@@ -511,7 +511,7 @@ function Client:_handleRecoverableError(url, statusCode)
       message = url ..
       " responded " ..
       statusCode ..
-      " which means the resource was not found. Stopping refresh of toggles for " .. nextFetch .. " seconds",
+      " which means the resource was not found. Stopping refresh of toggles for " .. nextFetchDelay .. " seconds",
       code = statusCode,
     })
   elseif statusCode == 500 or -- internal server error
@@ -523,12 +523,12 @@ function Client:_handleRecoverableError(url, statusCode)
       message = url ..
       " responded " ..
       statusCode ..
-      " which means the server is having issues. Stopping refresh of toggles for " .. nextFetch .. " seconds",
+      " which means the server is having issues. Stopping refresh of toggles for " .. nextFetchDelay .. " seconds",
       code = statusCode,
     })
   end
 
-  return nextFetch
+  return nextFetchDelay
 end
 
 function Client:_nextFetch()
@@ -547,7 +547,8 @@ function Client:_countSuccess()
 end
 
 function Client:_timedFetch(interval)
-  if interval > 0 and self.mode.type == "polling" then
+  -- if interval > 0 and self.mode.type == "polling" then
+  if interval > 0 then
     self.logger:debug("Timed fetching toggles in " .. interval .. " seconds.")
 
     self.timer:timeout(interval, function()
@@ -804,7 +805,9 @@ function Client:_fetchToggles(callback)
         self:_emit(Events.ERROR, { type = "JsonError", message = tostring(err) })
         self.lastError = { type = "JsonError", message = tostring(err) }
 
-        callback({ type = "JsonError", message = tostring(err) })
+        if callback then
+          callback({ type = "JsonError", message = tostring(err) })
+        end
         return
       end
 
@@ -820,7 +823,9 @@ function Client:_fetchToggles(callback)
         end
 
         self:_storeLastRefreshTimestamp(function()
-          callback() -- 성공 시 오류 없이 콜백
+          if callback then
+            callback() -- 성공 시 오류 없이 콜백
+          end
         end)
 
         self.storage:save(ETAG_KEY, self.etag)
@@ -842,7 +847,9 @@ function Client:_fetchToggles(callback)
       end
 
       self:_storeLastRefreshTimestamp(function()
-        callback() -- 304도 성공으로 처리
+        if callback then
+          callback() -- 304도 성공으로 처리
+        end
       end)
 
       self:_timedFetch(self.refreshInterval)
@@ -858,10 +865,12 @@ function Client:_fetchToggles(callback)
       self:_emit(Events.ERROR, errorObj)
       self.lastError = errorObj
 
-      local nextFetch = self:_handleErrorCases(url, response.status)
-      self:_timedFetch(nextFetch)
+      local nextFetchDelay = self:_handleErrorCases(url, response.status)
+      self:_timedFetch(nextFetchDelay)
 
-      callback(errorObj) -- 오류 객체 전달
+      if callback then
+        callback(errorObj) -- 오류 객체 전달
+      end
     end
   end)
 end
