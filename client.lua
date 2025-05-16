@@ -458,7 +458,7 @@ function Client:start(callback)
       self.metricsReporter:start()
 
       callback()
-      end)
+    end)
   end)
 end
 
@@ -484,7 +484,8 @@ function Client:_handleConfigurationError(url, statusCode)
     self:_emit(Events.ERROR, {
       type = "ConfigurationError",
       message = url ..
-      " responded " .. statusCode .. " which means your API key is not allowed to connect. Stopping refresh of toggles",
+          " responded " ..
+          statusCode .. " which means your API key is not allowed to connect. Stopping refresh of toggles",
       code = statusCode,
     })
   end
@@ -498,22 +499,31 @@ function Client:_handleRecoverableError(url, statusCode)
   if statusCode == 429 then -- too many request
     self:_emit(Events.ERROR, {
       type = "RateLimitError",
-      message = url .. " responded " .. statusCode .. " which means you are being rate limited. Stopping refresh of toggles for " .. nextFetch .. " seconds",
+      message = url ..
+      " responded " ..
+      statusCode ..
+      " which means you are being rate limited. Stopping refresh of toggles for " .. nextFetch .. " seconds",
       code = statusCode,
     })
   elseif statusCode == 404 then -- not found
     self:_emit(Events.ERROR, {
       type = "NotFoundError",
-      message = url .. " responded " .. statusCode .. " which means the resource was not found. Stopping refresh of toggles for " .. nextFetch .. " seconds",
+      message = url ..
+      " responded " ..
+      statusCode ..
+      " which means the resource was not found. Stopping refresh of toggles for " .. nextFetch .. " seconds",
       code = statusCode,
     })
-  elseif statusCode == 500 or   -- internal server error
-      statusCode == 502 or      -- bad gate way
-      statusCode == 503 or      -- service unavailable
-      statusCode == 504 then    -- gateway timeout
+  elseif statusCode == 500 or -- internal server error
+      statusCode == 502 or    -- bad gate way
+      statusCode == 503 or    -- service unavailable
+      statusCode == 504 then  -- gateway timeout
     self:_emit(Events.ERROR, {
       type = "ServerError",
-      message = url .. " responded " .. statusCode .. " which means the server is having issues. Stopping refresh of toggles for " .. nextFetch .. " seconds",
+      message = url ..
+      " responded " ..
+      statusCode ..
+      " which means the server is having issues. Stopping refresh of toggles for " .. nextFetch .. " seconds",
       code = statusCode,
     })
   end
@@ -537,14 +547,13 @@ function Client:_countSuccess()
 end
 
 function Client:_timedFetch(interval)
-  self.logger:info("Timed fetching toggles in " .. interval .. " seconds.")
+  if interval > 0 and self.mode.type == "polling" then
+    self.logger:debug("Timed fetching toggles in " .. interval .. " seconds.")
 
-  -- TODO
-  -- if refresh > 0 and self.mode.type == "polling" then
     self.timer:timeout(interval, function()
       self:_fetchToggles(function(err) end)
     end)
-  -- end
+  end
 end
 
 function Client:stop()
