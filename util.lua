@@ -156,6 +156,13 @@ local iso8601UtcNow = function()
   return os.date("!%Y-%m-%dT%H:%M:%SZ")
 end
 
+local iso8601UtcNowWithMSec = function()
+  local now = os.time() -- socket.gettime()
+  local seconds = math.floor(now)
+  local milliseconds = math.floor((now - seconds) * 1000)
+  return os.date("!%Y-%m-%dT%H:%M:%S", seconds) .. string.format(".%03dZ", milliseconds)
+end
+
 -- Utility function to calculate the hash value of a table or object
 -- Usage: local hash = calculateHash(obj)
 --   - Computes the hash value of the given object (table or other value) and returns it as an integer.
@@ -289,6 +296,7 @@ return {
   isEmptyTable = isEmptyTable,
   uuid = uuid,
   iso8601UtcNow = iso8601UtcNow,
+  iso8601UtcNowWithMSec = iso8601UtcNowWithMSec,
   calculateHash = calculateHash,
   findCaseInsensitive = findCaseInsensitive,
   pathJoin = pathJoin,

@@ -12,16 +12,16 @@ local EventEmitter = {}
 EventEmitter.__index = EventEmitter
 
 local function removeEntry(t, pred)
-  local x, len = 0, #t
+  local x, len = 0, #t or 0
   for i = 1, len do
-    local trusy, index = false, (i - x)
-    if (type(pred) == "function") then
+    local trusy, index = false, i - x
+    if type(pred) == "function" then
       trusy = pred(t[index])
     else
       trusy = t[index] == pred
     end
 
-    if (t[index] ~= nil and trusy) then
+    if t[index] ~= nil and trusy then
       t[index] = nil
       table.remove(t, index)
       x = x + 1
@@ -33,7 +33,7 @@ end
 
 function EventEmitter.new(loggerFactory)
   local self = setmetatable({}, EventEmitter)
-  self.logger = loggerFactory:createLogger("FFEventEmitter")
+  self.logger = loggerFactory:createLogger("EventEmitter")
   self._on = {}
   return self
 end
@@ -59,7 +59,7 @@ function EventEmitter:addListener(event, listener)
 
   if listenerCount > maxListeners then
     self.logger:warn("Number of " ..
-    string.sub(eventPrefix, PREFIX_LENGTH + 1) .. " event listeners: " .. tostring(listenerCount))
+      string.sub(eventPrefix, PREFIX_LENGTH + 1) .. " event listeners: " .. tostring(listenerCount))
   end
 
   return self
@@ -67,6 +67,10 @@ end
 
 function EventEmitter:on(event, listener)
   self:addListener(event, listener)
+
+  return function()
+    self:removeListener(event, listener)
+  end
 end
 
 function EventEmitter:once(event, listener)
@@ -75,7 +79,8 @@ function EventEmitter:once(event, listener)
   local maxListeners = self.currentMaxListeners or DEFAULT_MAX_LISTENERS
   local listenerCount = self:listenerCount(event)
   if listenerCount > maxListeners then
-    self.logger:warn("Number of " .. event .. " event listeners: " .. tostring(listenerCount))
+    self.logger:warn("Number of " ..
+      string.sub(eventPrefix, PREFIX_LENGTH + 1) .. " event listeners: " .. tostring(listenerCount))
   end
 
   table.insert(eventTable, listener)
@@ -96,8 +101,8 @@ function EventEmitter:emit(event, ...)
   if eventTable ~= nil then
     for _, listener in ipairs(eventTable) do
       local status, error = pcall(listener, ...)
-      if not (status) then
-        self.logger:error(string.sub(_, PREFIX_LENGTH + 1) .. " emit error: " .. tostring(error))
+      if not status then
+        self.logger:error(string.sub(eventPrefix, PREFIX_LENGTH + 1) .. " emit error: " .. tostring(error))
       end
     end
   end
@@ -110,7 +115,7 @@ function EventEmitter:emit(event, ...)
     for _, listener in ipairs(eventTable) do
       local status, error = pcall(listener, ...)
       if not status then
-        self.logger:error(string.sub(_, PREFIX_LENGTH + 1) .. " emit error: " .. tostring(error))
+        self.logger:error(string.sub(eventPrefix, PREFIX_LENGTH + 1) .. " emit error: " .. tostring(error))
       end
     end
 
@@ -145,13 +150,31 @@ function EventEmitter:listenerCount(event)
   return totalNum
 end
 
+function EventEmitter:hasListeners(event)
+  local eventPrefix = PREFIX .. tostring(event)
+  local eventTable = self:getEventTable(eventPrefix)
+
+  if eventTable ~= nil and #eventTable > 0 then
+    return true
+  end
+
+  eventPrefix = eventPrefix .. ":once"
+  eventTable = self:getEventTable(eventPrefix)
+
+  if eventTable ~= nil and #eventTable > 0 then
+    return true
+  end
+
+  return false
+end
+
 function EventEmitter:listeners(event)
   local eventPrefix = PREFIX .. tostring(event)
   local eventTable = self:getEventTable(eventPrefix)
   local clone = {}
 
   if eventTable ~= nil then
-    for i, listener in ipairs(eventTable) do
+    for _, listener in ipairs(eventTable) do
       table.insert(clone, listener)
     end
   end
@@ -160,7 +183,7 @@ function EventEmitter:listeners(event)
   eventTable = self:getEventTable(eventPrefix)
 
   if eventTable ~= nil then
-    for i, listener in ipairs(eventTable) do
+    for _, listener in ipairs(eventTable) do
       table.insert(clone, listener)
     end
   end
@@ -179,7 +202,7 @@ function EventEmitter:removeAllListeners(event)
     removeEntry(eventTable, function(v) return v ~= nil end)
     self._on[eventPrefix] = nil
   else
-    for eventPrefix, t in pairs(self._on) do
+    for eventPrefix, _ in pairs(self._on) do
       self:removeAllListeners(string.sub(eventPrefix, PREFIX_LENGTH + 1))
     end
   end

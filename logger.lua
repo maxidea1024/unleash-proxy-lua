@@ -1,7 +1,7 @@
 local LogLevel = {
-  VeryVerbose = 0,
-  Verbose = 1,
-  Log = 2,
+  Trace = 0,
+  Debug = 1,
+  Info = 2,
   Warning = 3,
   Error = 4,
   Fatal = 5,
@@ -9,9 +9,9 @@ local LogLevel = {
 }
 
 local levelNames = {
-  [0] = "VeryVerbose",
-  [1] = "Verbose",
-  [2] = "Log",
+  [0] = "Trace",
+  [1] = "Debug",
+  [2] = "Info",
   [3] = "Warning",
   [4] = "Error",
   [5] = "Fatal",
@@ -37,7 +37,7 @@ ConsoleSink.__index = ConsoleSink
 
 function ConsoleSink.new(minLevel, formatter)
   return setmetatable({
-    minLevel = minLevel or LogLevel.Log,
+    minLevel = minLevel or LogLevel.Info,
     formatter = formatter or defaultFormatter
   }, ConsoleSink)
 end
@@ -55,7 +55,7 @@ function FileSink.new(path, minLevel, formatter)
   local f = assert(io.open(path, "a"))
   return setmetatable({
     file = f,
-    minLevel = minLevel or LogLevel.Log,
+    minLevel = minLevel or LogLevel.Info,
     formatter = formatter or defaultFormatter
   }, FileSink)
 end
@@ -73,7 +73,7 @@ FunctionSink.__index = FunctionSink
 function FunctionSink.new(callback, minLevel, formatter)
   return setmetatable({
     callback = callback,
-    minLevel = minLevel or LogLevel.Log,
+    minLevel = minLevel or LogLevel.Info,
     formatter = formatter or defaultFormatter
   }, FunctionSink)
 end
@@ -90,7 +90,7 @@ UnrealEngineSink.__index = UnrealEngineSink
 function UnrealEngineSink.new(logFunc, minLevel, formatter)
   return setmetatable({
     logFunc = logFunc,
-    minLevel = minLevel or LogLevel.Log,
+    minLevel = minLevel or LogLevel.Info,
     formatter = formatter or defaultFormatter
   }, UnrealEngineSink)
 end
@@ -108,7 +108,7 @@ Logger.__index = Logger
 function Logger.new(category, minLevel, sinks)
   return setmetatable({
     category = category,
-    minLevel = minLevel or LogLevel.Log,
+    minLevel = minLevel or LogLevel.Info,
     sinks = sinks or {}
   }, Logger)
 end
@@ -126,24 +126,66 @@ function Logger:log(level, message, ...)
   end
 end
 
-function Logger:trace(msg, ...) self:log(LogLevel.VeryVerbose, msg, ...) end
+function Logger:trace(msg, ...) self:log(LogLevel.Trace, msg, ...) end
 
-function Logger:debug(msg, ...) self:log(LogLevel.Verbose, msg, ...) end
+function Logger:debug(msg, ...) self:log(LogLevel.Debug, msg, ...) end
 
-function Logger:info(msg, ...) self:log(LogLevel.Log, msg, ...) end
+function Logger:info(msg, ...) self:log(LogLevel.Info, msg, ...) end
 
 function Logger:warn(msg, ...) self:log(LogLevel.Warning, msg, ...) end
 
 function Logger:error(msg, ...) self:log(LogLevel.Error, msg, ...) end
 
-function Logger:critical(msg, ...) self:log(LogLevel.Fatal, msg, ...) end
+function Logger:fatal(msg, ...) self:log(LogLevel.Fatal, msg, ...) end
+
+function Logger:traceLambda(func)
+  if self:isEnabled(LogLevel.Trace) then
+    local msg = func()
+    self:log(LogLevel.Trace, msg)
+  end
+end
+
+function Logger:debugLambda(func)
+  if self:isEnabled(LogLevel.Debug) then
+    local msg = func()
+    self:log(LogLevel.Debug, msg)
+  end
+end
+
+function Logger:infoLambda(func)
+  if self:isEnabled(LogLevel.Info) then
+    local msg = func()
+    self:log(LogLevel.Info, msg)
+  end
+end
+
+function Logger:warnLambda(func)
+  if self:isEnabled(LogLevel.Warning) then
+    local msg = func()
+    self:log(LogLevel.Warning, msg)
+  end
+end
+
+function Logger:errorLambda(func)
+  if self:isEnabled(LogLevel.Error) then
+    local msg = func()
+    self:log(LogLevel.Error, msg)
+  end
+end
+
+function Logger:fatalLambda(func)
+  if self:isEnabled(LogLevel.Fatal) then
+    local msg = func()
+    self:log(LogLevel.Fatal, msg)
+  end
+end
 
 local LoggerFactory = {}
 LoggerFactory.__index = LoggerFactory
 
 function LoggerFactory.new(minLevel, sinks)
   return setmetatable({
-    minLevel = minLevel or LogLevel.Log,
+    minLevel = minLevel or LogLevel.Info,
     sinks = sinks or {}
   }, LoggerFactory)
 end
@@ -162,9 +204,9 @@ function DefaultLoggerFactory.new(minLevel)
     ULuaUtils.LogWrite(category, 1, line)
     -- print(line)
   end
-  local sink = FunctionSink.new(printCallback, minLevel or LogLevel.Log)
+  local sink = FunctionSink.new(printCallback, minLevel or LogLevel.Info)
   return setmetatable({
-    minLevel = minLevel or LogLevel.Log,
+    minLevel = minLevel or LogLevel.Info,
     sinks = { sink }
   }, DefaultLoggerFactory)
 end
@@ -178,7 +220,7 @@ SilentLoggerFactory.__index = SilentLoggerFactory
 
 function SilentLoggerFactory.new(minLevel)
   return setmetatable({
-    minLevel = minLevel or LogLevel.Log,
+    minLevel = minLevel or LogLevel.Info,
     sinks = {}
   }, SilentLoggerFactory)
 end
@@ -207,8 +249,8 @@ local ueSink = logger.UnrealEngineSink.new(function(level, tag, msg)
     print(string.format("[UE-%s] [%s] %s", level, tag, msg))
 end, logger.LogLevel.Warning)
 
-local factory = logger.LoggerFactory.new(logger.LogLevel.Verbose, {
-    logger.ConsoleSink.new(logger.LogLevel.Verbose),
+local factory = logger.LoggerFactory.new(logger.LogLevel.Debug, {
+    logger.ConsoleSink.new(logger.LogLevel.Debug),
     logger.FileSink.new("game.log", logger.LogLevel.Debug),
     ueSink
 })

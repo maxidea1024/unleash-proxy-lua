@@ -15,7 +15,7 @@ function MetricsReporter.new(config)
   if not config.loggerFactory then error("`loggerFactory` is required") end
 
   local self = setmetatable({}, MetricsReporter)
-  self.logger = config.loggerFactory:createLogger("FFMetricsReporter")
+  self.logger = config.loggerFactory:createLogger("MetricsReporter")
   self.onError = config.onError
   self.onSent = config.onSent or function() end
   self.disabled = config.disableMetrics or false
@@ -49,6 +49,8 @@ function MetricsReporter:start()
 
     self.timerRunning = true
 
+    -- timeout으로 변경하자.
+
     self.timer:async(function()
       -- Initial delay before starting the metrics collection
       if self.metricsIntervalInitial > 0 then
@@ -77,7 +79,7 @@ end
 
 function MetricsReporter:_createEmptyBucket()
   return {
-    start = os.time(),
+    start = util.iso8601UtcNowWithMSec(),
     stop = nil,
     toggles = {},
   }
@@ -90,6 +92,7 @@ function MetricsReporter:_getHeaders()
     ["Content-Type"] = "application/json",
   }
 
+  -- TODO customHeadersFunction
   for name, value in pairs(self.customHeaders) do
     if value then
       headers[name] = value
@@ -122,7 +125,7 @@ function MetricsReporter:sendMetrics()
     return
   end
 
-  -- 주의: POST method를 사용하는 경우에는 Content-Length를 지정해야함
+  -- Note: When using the POST method, you must specify the Content-Length
   headers["Content-Length"] = tostring(#jsonBody)
 
   self.request(url, "POST", headers, jsonBody, function(response)
@@ -148,7 +151,9 @@ function MetricsReporter:count(name, enabled)
   end
 
   self:_ensureBucketExists(name)
-  self.bucket.toggles[name][enabled and "yes" or "no"] = self.bucket.toggles[name][enabled and "yes" or "no"] + 1
+
+  local yesOrNo = enabled and "yes" or "no"
+  self.bucket.toggles[name][yesOrNo] = self.bucket.toggles[name][yesOrNo] + 1
   return true
 end
 
@@ -158,6 +163,7 @@ function MetricsReporter:countVariant(name, variant)
   end
 
   self:_ensureBucketExists(name)
+
   self.bucket.toggles[name].variants[variant] = (self.bucket.toggles[name].variants[variant] or 0) + 1
   return true
 end
@@ -171,7 +177,7 @@ function MetricsReporter:_ensureBucketExists(name)
     self.bucket.toggles[name] = {
       yes = 0,
       no = 0,
-      variants = setmetatable({}, { __jsontype = 'object' }), -- 배열로 인식되면 안되고, 반드시 오브젝트로 인식되어야함.
+      variants = setmetatable({}, { __jsontype = 'object' }), -- Must be recognized as an object, not an array.
     }
   end
 
@@ -182,7 +188,7 @@ function MetricsReporter:_getPayload()
   -- take
   local bucket = {
     start = self.bucket.start,
-    stop = os.time(),
+    stop = util.iso8601UtcNowWithMSec(),
     toggles = self.bucket.toggles,
   }
 

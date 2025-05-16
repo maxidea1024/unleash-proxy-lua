@@ -4,7 +4,7 @@
   and its value is a string describing the event.
 
   Keys and their meanings:
-  - INIT: Represents the "initialized" event, triggered when initialization is complete.
+  - INIT: Represents the "init" event, triggered when initialization is complete.
   - ERROR: Represents the "error" event, triggered when an error occurs.
   - READY: Represents the "ready" event, triggered when the system is ready.
   - UPDATE: Represents the "update" event, triggered when an update occurs.
@@ -15,7 +15,7 @@
   This table is returned as a module for use in other parts of the application.
 ]]
 local Events = {
-  INIT = "initialized",
+  INIT = "init",
   ERROR = "error",
   READY = "ready",
   UPDATE = "update",

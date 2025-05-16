@@ -10,7 +10,7 @@ function FileStorageProvider.new(backupPath, prefix, loggerFactory)
   local self = setmetatable({}, FileStorageProvider)
   self.backupPath = backupPath or Util.getTempDir()
   self.prefix = prefix or ""
-  self.logger = loggerFactory:createLogger("FFFileStorageProvider")
+  self.logger = loggerFactory:createLogger("FileStorageProvider")
   return self
 end
 
