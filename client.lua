@@ -857,6 +857,8 @@ function Client:fetchToggles(callback)
     if response.status >= 200 and response.status < 300 then
       self.etag = Util.FindCaseInsensitive(response.headers, "ETag") or nil
 
+      self.logger:Debug("status=%d, ETAG: %s", response.status, tostring(self.etag))
+
       local data, err = Json.decode(response.body)
       if not data then
         self.logger:Error("JSON decode failed: %s", tostring(err))
@@ -970,21 +972,21 @@ function Client:selectToggleMap()
   end
 end
 
-function Client:SyncToggles(callback)
-  if not self.synchronizedToggleMap then
+function Client:SyncToggles(fetchNow, callback)
+  if not self.useExplicitSyncMode then
     self:safeCallCallback(callback)
     return
   end
 
-  -- TODO background에서 이미 업데이트하고 있었는데, 또다시 업데이트를 해야하만 할까?
-  -- self:UpdateToggles(function()
-  -- TODO 변경된 내용을 최신 내용에 복제를 해줘야함.
-  -- self:safeCallCallback(callback)
-  -- end)
-
-  self.synchronizedToggleMap = Util.DeepClone(self.toggleMap)
-
-  self:safeCallCallback(callback)
+  if fetchNow then
+    self:UpdateToggles(function()
+      self.synchronizedToggleMap = Util.DeepClone(self.toggleMap)
+      self:safeCallCallback(callback)
+    end)
+  else
+    self.synchronizedToggleMap = Util.DeepClone(self.toggleMap)
+    self:safeCallCallback(callback)
+  end
 end
 
 function Client:Subscribe(featureName, callback, ownerWeakref)
