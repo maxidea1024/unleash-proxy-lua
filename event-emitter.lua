@@ -31,9 +31,9 @@ local function removeEntry(t, pred)
   return t
 end
 
-function EventEmitter.new(loggerFactory)
+function EventEmitter.New(loggerFactory)
   local self = setmetatable({}, EventEmitter)
-  self.logger = loggerFactory:createLogger("UnleashEventEmitter")
+  self.logger = loggerFactory:CreateLogger("UnleashEventEmitter")
   self._on = {}
   return self
 end
@@ -50,11 +50,11 @@ function EventEmitter:getEventTable(event)
   return self._on[event]
 end
 
-function EventEmitter:addListener(event, listener)
+function EventEmitter:AddListener(event, listener)
   local eventPrefix = PREFIX .. tostring(event)
   local eventTable = self:getSafeEventTable(eventPrefix)
   local maxListeners = self.currentMaxListeners or DEFAULT_MAX_LISTENERS
-  local listenerCount = self:listenerCount(event)
+  local listenerCount = self:ListenerCount(event)
   table.insert(eventTable, listener)
 
   if listenerCount > maxListeners then
@@ -65,19 +65,19 @@ function EventEmitter:addListener(event, listener)
   return self
 end
 
-function EventEmitter:on(event, listener)
-  self:addListener(event, listener)
+function EventEmitter:On(event, listener)
+  self:AddListener(event, listener)
 
   return function()
-    self:removeListener(event, listener)
+    self:RemoveListener(event, listener)
   end
 end
 
-function EventEmitter:once(event, listener)
+function EventEmitter:Once(event, listener)
   local eventPrefix = PREFIX .. tostring(event) .. ":once"
   local eventTable = self:getSafeEventTable(eventPrefix)
   local maxListeners = self.currentMaxListeners or DEFAULT_MAX_LISTENERS
-  local listenerCount = self:listenerCount(event)
+  local listenerCount = self:ListenerCount(event)
   if listenerCount > maxListeners then
     self.logger:warn("Number of " ..
       string.sub(eventPrefix, PREFIX_LENGTH + 1) .. " event listeners: " .. tostring(listenerCount))
@@ -87,22 +87,22 @@ function EventEmitter:once(event, listener)
   return self
 end
 
-function EventEmitter:off(event, listener)
+function EventEmitter:Off(event, listener)
   if listener == nil then
-    return self:removeAllListeners(event)
+    return self:RemoveAllListeners(event)
   else
-    self:removeListener(event, listener)
+    self:RemoveListener(event, listener)
   end
 end
 
-function EventEmitter:emit(event, ...)
+function EventEmitter:Emit(event, ...)
   local eventPrefix = PREFIX .. tostring(event)
   local eventTable = self:getEventTable(eventPrefix)
   if eventTable ~= nil then
     for _, listener in ipairs(eventTable) do
       local status, error = pcall(listener, ...)
       if not status then
-        self.logger:error(string.sub(eventPrefix, PREFIX_LENGTH + 1) .. " emit error: " .. tostring(error))
+        self.logger:Error(string.sub(eventPrefix, PREFIX_LENGTH + 1) .. " emit error: " .. tostring(error))
       end
     end
   end
@@ -115,7 +115,7 @@ function EventEmitter:emit(event, ...)
     for _, listener in ipairs(eventTable) do
       local status, error = pcall(listener, ...)
       if not status then
-        self.logger:error(string.sub(eventPrefix, PREFIX_LENGTH + 1) .. " emit error: " .. tostring(error))
+        self.logger:Error(string.sub(eventPrefix, PREFIX_LENGTH + 1) .. " emit error: " .. tostring(error))
       end
     end
 
@@ -127,11 +127,11 @@ function EventEmitter:emit(event, ...)
   return self
 end
 
-function EventEmitter:getMaxListeners()
+function EventEmitter:GetMaxListeners()
   return self.currentMaxListeners or self.defaultMaxListeners
 end
 
-function EventEmitter:listenerCount(event)
+function EventEmitter:ListenerCount(event)
   local totalNum = 0
   local eventPrefix = PREFIX .. tostring(event)
   local eventTable = self:getEventTable(eventPrefix)
@@ -150,7 +150,7 @@ function EventEmitter:listenerCount(event)
   return totalNum
 end
 
-function EventEmitter:hasListeners(event)
+function EventEmitter:HasListeners(event)
   local eventPrefix = PREFIX .. tostring(event)
   local eventTable = self:getEventTable(eventPrefix)
 
@@ -168,7 +168,7 @@ function EventEmitter:hasListeners(event)
   return false
 end
 
-function EventEmitter:listeners(event)
+function EventEmitter:Listeners(event)
   local eventPrefix = PREFIX .. tostring(event)
   local eventTable = self:getEventTable(eventPrefix)
   local clone = {}
@@ -191,7 +191,7 @@ function EventEmitter:listeners(event)
   return clone
 end
 
-function EventEmitter:removeAllListeners(event)
+function EventEmitter:RemoveAllListeners(event)
   if event ~= nil then
     local eventPrefix = PREFIX .. tostring(event)
     local eventTable = self:getSafeEventTable(eventPrefix)
@@ -203,7 +203,7 @@ function EventEmitter:removeAllListeners(event)
     self._on[eventPrefix] = nil
   else
     for eventPrefix, _ in pairs(self._on) do
-      self:removeAllListeners(string.sub(eventPrefix, PREFIX_LENGTH + 1))
+      self:RemoveAllListeners(string.sub(eventPrefix, PREFIX_LENGTH + 1))
     end
   end
 
@@ -216,7 +216,7 @@ function EventEmitter:removeAllListeners(event)
   return self
 end
 
-function EventEmitter:removeListener(event, listener)
+function EventEmitter:RemoveListener(event, listener)
   local eventPrefix = PREFIX .. tostring(event)
   local eventTable = self:getSafeEventTable(eventPrefix)
   if listener == nil then
@@ -241,7 +241,7 @@ function EventEmitter:removeListener(event, listener)
   return self
 end
 
-function EventEmitter:setMaxListeners(n)
+function EventEmitter:SetMaxListeners(n)
   self.currentMaxListeners = n
   return self
 end

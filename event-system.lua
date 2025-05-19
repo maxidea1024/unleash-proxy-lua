@@ -29,20 +29,20 @@ end
 local EventSystem = {}
 EventSystem.__index = EventSystem
 
-function EventSystem.new(loggerFactory)
+function EventSystem.New(loggerFactory)
   local self = setmetatable({}, EventSystem)
-  self.logger = loggerFactory:createLogger("UnleashEventSystem")
+  self.logger = loggerFactory:CreateLogger("UnleashEventSystem")
   self.events = createCaseInsensitiveTable()
   return self
 end
 
-function EventSystem:watch(eventName, callback, ownerWeakref)
+function EventSystem:Watch(eventName, callback, ownerWeakref)
   if type(eventName) ~= "string" then
-    self.logger:error("`eventName` must be a string")
+    self.logger:Error("`eventName` must be a string")
   end
 
   if type(callback) ~= "function" then
-    self.logger:error("`callback` must be a function")
+    self.logger:Error("`callback` must be a function")
   end
 
   if not self.events[eventName] then
@@ -58,17 +58,17 @@ function EventSystem:watch(eventName, callback, ownerWeakref)
   table.insert(self.events[eventName], entry)
 
   return function()
-    self:unwatch(eventName, callback)
+    self:Unwatch(eventName, callback)
   end
 end
 
-function EventSystem:unwatch(eventName, callback)
+function EventSystem:Unwatch(eventName, callback)
   if type(eventName) ~= "string" then
-    self.logger:error("`eventName` must be a string")
+    self.logger:Error("`eventName` must be a string")
   end
 
   if type(callback) ~= "function" then
-    self.logger:error("`callback` must be a function")
+    self.logger:Error("`callback` must be a function")
   end
 
   local callbacks = self.events[eventName]
@@ -83,13 +83,13 @@ function EventSystem:unwatch(eventName, callback)
   return false
 end
 
-function EventSystem:isWatching(eventName, callback)
+function EventSystem:IsWatching(eventName, callback)
   if type(eventName) ~= "string" then
-    self.logger:error("`eventName` must be a string")
+    self.logger:Error("`eventName` must be a string")
   end
 
   if type(callback) ~= "function" then
-    self.logger:error("`callback` must be a function")
+    self.logger:Error("`callback` must be a function")
   end
 
   local callbacks = self.events[eventName]
@@ -103,21 +103,21 @@ function EventSystem:isWatching(eventName, callback)
   return false
 end
 
-function EventSystem:isWatchingEvent(eventName)
+function EventSystem:IsWatchingEvent(eventName)
   if type(eventName) ~= "string" then
-    self.logger:error("`eventName` must be a string")
+    self.logger:Error("`eventName` must be a string")
   end
 
   local callbacks = self.events[eventName]
   return callbacks and #callbacks > 0
 end
 
-function EventSystem:emit(eventName, ...)
+function EventSystem:Emit(eventName, ...)
   if type(eventName) ~= "string" then
-    self.logger:error("`eventName` must be a string")
+    self.logger:Error("`eventName` must be a string")
   end
 
-  self.logger:debug("Emit event: `" .. eventName .. "`")
+  self.logger:Debug("Emit event: `" .. eventName .. "`")
 
   local callbacks = self.events[eventName]
   if callbacks then

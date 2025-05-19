@@ -35,14 +35,14 @@ end
 local ConsoleSink = {}
 ConsoleSink.__index = ConsoleSink
 
-function ConsoleSink.new(minLevel, formatter)
+function ConsoleSink.New(minLevel, formatter)
   return setmetatable({
     minLevel = minLevel or LogLevel.Info,
     formatter = formatter or defaultFormatter
   }, ConsoleSink)
 end
 
-function ConsoleSink:write(time, level, category, message)
+function ConsoleSink:Write(time, level, category, message)
   if level < self.minLevel then return end
   local out = self.formatter(time, level, category, message)
   io.write(out .. "\n")
@@ -51,7 +51,7 @@ end
 local FileSink = {}
 FileSink.__index = FileSink
 
-function FileSink.new(path, minLevel, formatter)
+function FileSink.New(path, minLevel, formatter)
   local f = assert(io.open(path, "a"))
   return setmetatable({
     file = f,
@@ -60,7 +60,7 @@ function FileSink.new(path, minLevel, formatter)
   }, FileSink)
 end
 
-function FileSink:write(time, level, category, message)
+function FileSink:Write(time, level, category, message)
   if level < self.minLevel then return end
   local out = self.formatter(time, level, category, message)
   self.file:write(out .. "\n")
@@ -70,7 +70,7 @@ end
 local FunctionSink = {}
 FunctionSink.__index = FunctionSink
 
-function FunctionSink.new(callback, minLevel, formatter)
+function FunctionSink.New(callback, minLevel, formatter)
   return setmetatable({
     callback = callback,
     minLevel = minLevel or LogLevel.Info,
@@ -78,7 +78,7 @@ function FunctionSink.new(callback, minLevel, formatter)
   }, FunctionSink)
 end
 
-function FunctionSink:write(time, level, category, message)
+function FunctionSink:Write(time, level, category, message)
   if level < self.minLevel then return end
   local out = self.formatter(time, level, category, message)
   self.callback(time, level, category, out)
@@ -87,7 +87,7 @@ end
 local UnrealEngineSink = {}
 UnrealEngineSink.__index = UnrealEngineSink
 
-function UnrealEngineSink.new(logFunc, minLevel, formatter)
+function UnrealEngineSink.New(logFunc, minLevel, formatter)
   return setmetatable({
     logFunc = logFunc,
     minLevel = minLevel or LogLevel.Info,
@@ -95,7 +95,7 @@ function UnrealEngineSink.new(logFunc, minLevel, formatter)
   }, UnrealEngineSink)
 end
 
-function UnrealEngineSink:write(time, level, category, message)
+function UnrealEngineSink:Write(time, level, category, message)
   if level < self.minLevel then return end
   local out = self.formatter(time, level, category, message)
   local unrealLevel = getLevelName(level)
@@ -105,7 +105,7 @@ end
 local Logger = {}
 Logger.__index = Logger
 
-function Logger.new(category, minLevel, sinks)
+function Logger.New(category, minLevel, sinks)
   return setmetatable({
     category = category,
     minLevel = minLevel or LogLevel.Info,
@@ -113,120 +113,120 @@ function Logger.new(category, minLevel, sinks)
   }, Logger)
 end
 
-function Logger:isEnabled(level)
+function Logger:IsEnabled(level)
   return level >= self.minLevel
 end
 
-function Logger:log(level, message, ...)
-  if not self:isEnabled(level) then return end
+function Logger:Log(level, message, ...)
+  if not self:IsEnabled(level) then return end
   local formatted = string.format(message, ...)
   local time = getTime()
   for _, sink in ipairs(self.sinks) do
-    sink:write(time, level, self.category, formatted)
+    sink:Write(time, level, self.category, formatted)
   end
 end
 
-function Logger:trace(msg, ...) self:log(LogLevel.Trace, msg, ...) end
+function Logger:Trace(msg, ...) self:Log(LogLevel.Trace, msg, ...) end
 
-function Logger:debug(msg, ...) self:log(LogLevel.Debug, msg, ...) end
+function Logger:Debug(msg, ...) self:Log(LogLevel.Debug, msg, ...) end
 
-function Logger:info(msg, ...) self:log(LogLevel.Info, msg, ...) end
+function Logger:Info(msg, ...) self:Log(LogLevel.Info, msg, ...) end
 
-function Logger:warn(msg, ...) self:log(LogLevel.Warning, msg, ...) end
+function Logger:Warn(msg, ...) self:Log(LogLevel.Warning, msg, ...) end
 
-function Logger:error(msg, ...) self:log(LogLevel.Error, msg, ...) end
+function Logger:Error(msg, ...) self:Log(LogLevel.Error, msg, ...) end
 
-function Logger:fatal(msg, ...) self:log(LogLevel.Fatal, msg, ...) end
+function Logger:Fatal(msg, ...) self:Log(LogLevel.Fatal, msg, ...) end
 
-function Logger:traceLambda(func)
-  if self:isEnabled(LogLevel.Trace) then
+function Logger:TraceLambda(func)
+  if self:IsEnabled(LogLevel.Trace) then
     local msg = func()
-    self:log(LogLevel.Trace, msg)
+    self:Log(LogLevel.Trace, msg)
   end
 end
 
-function Logger:debugLambda(func)
-  if self:isEnabled(LogLevel.Debug) then
+function Logger:DebugLambda(func)
+  if self:IsEnabled(LogLevel.Debug) then
     local msg = func()
-    self:log(LogLevel.Debug, msg)
+    self:Log(LogLevel.Debug, msg)
   end
 end
 
-function Logger:infoLambda(func)
-  if self:isEnabled(LogLevel.Info) then
+function Logger:InfoLambda(func)
+  if self:IsEnabled(LogLevel.Info) then
     local msg = func()
-    self:log(LogLevel.Info, msg)
+    self:Log(LogLevel.Info, msg)
   end
 end
 
-function Logger:warnLambda(func)
-  if self:isEnabled(LogLevel.Warning) then
+function Logger:WarnLambda(func)
+  if self:IsEnabled(LogLevel.Warning) then
     local msg = func()
-    self:log(LogLevel.Warning, msg)
+    self:Log(LogLevel.Warning, msg)
   end
 end
 
-function Logger:errorLambda(func)
-  if self:isEnabled(LogLevel.Error) then
+function Logger:ErrorLambda(func)
+  if self:IsEnabled(LogLevel.Error) then
     local msg = func()
-    self:log(LogLevel.Error, msg)
+    self:Log(LogLevel.Error, msg)
   end
 end
 
-function Logger:fatalLambda(func)
-  if self:isEnabled(LogLevel.Fatal) then
+function Logger:FatalLambda(func)
+  if self:IsEnabled(LogLevel.Fatal) then
     local msg = func()
-    self:log(LogLevel.Fatal, msg)
+    self:Log(LogLevel.Fatal, msg)
   end
 end
 
 local LoggerFactory = {}
 LoggerFactory.__index = LoggerFactory
 
-function LoggerFactory.new(minLevel, sinks)
+function LoggerFactory.New(minLevel, sinks)
   return setmetatable({
     minLevel = minLevel or LogLevel.Info,
     sinks = sinks or {}
   }, LoggerFactory)
 end
 
-function LoggerFactory:createLogger(category)
-  return Logger.new(category, self.minLevel, self.sinks)
+function LoggerFactory:CreateLogger(category)
+  return Logger.New(category, self.minLevel, self.sinks)
 end
 
 local DefaultLoggerFactory = {}
 DefaultLoggerFactory.__index = DefaultLoggerFactory
 
-function DefaultLoggerFactory.new(minLevel)
+function DefaultLoggerFactory.New(minLevel)
   local function printCallback(time, level, category, line)
     -- level 값이 unrealLevel 과 다르다. 확인 후 맵핑을 해주어야할듯하다.
     -- ULuaUtils.LogWrite(p.categoryName, writeLevel or 1, message)
     ULuaUtils.LogWrite(category, 1, line)
     -- print(line)
   end
-  local sink = FunctionSink.new(printCallback, minLevel or LogLevel.Info)
+  local sink = FunctionSink.New(printCallback, minLevel or LogLevel.Info)
   return setmetatable({
     minLevel = minLevel or LogLevel.Info,
     sinks = { sink }
   }, DefaultLoggerFactory)
 end
 
-function DefaultLoggerFactory:createLogger(category)
-  return Logger.new(category, self.minLevel, self.sinks)
+function DefaultLoggerFactory:CreateLogger(category)
+  return Logger.New(category, self.minLevel, self.sinks)
 end
 
 local SilentLoggerFactory = {}
 SilentLoggerFactory.__index = SilentLoggerFactory
 
-function SilentLoggerFactory.new(minLevel)
+function SilentLoggerFactory.New(minLevel)
   return setmetatable({
     minLevel = minLevel or LogLevel.Info,
     sinks = {}
   }, SilentLoggerFactory)
 end
 
-function SilentLoggerFactory:createLogger(category)
-  return Logger.new(category, self.minLevel, self.sinks)
+function SilentLoggerFactory:CreateLogger(category)
+  return Logger.New(category, self.minLevel, self.sinks)
 end
 
 return {
@@ -245,18 +245,18 @@ return {
 
 local logger = require("logger")
 
-local ueSink = logger.UnrealEngineSink.new(function(level, tag, msg)
+local ueSink = logger.UnrealEngineSink.New(function(level, tag, msg)
     print(string.format("[UE-%s] [%s] %s", level, tag, msg))
 end, logger.LogLevel.Warning)
 
-local factory = logger.LoggerFactory.new(logger.LogLevel.Debug, {
-    logger.ConsoleSink.new(logger.LogLevel.Debug),
-    logger.FileSink.new("game.log", logger.LogLevel.Debug),
+local factory = logger.LoggerFactory.New(logger.LogLevel.Debug, {
+    logger.ConsoleSink.New(logger.LogLevel.Debug),
+    logger.FileSink.New("game.log", logger.LogLevel.Debug),
     ueSink
 })
 
-local log = factory:createLogger("Game")
-log:info("Hello from %s!", "Lua")
-log:warn("Low health: %d%%", 30)
-log:error("Fatal error!")
+local log = factory:CreateLogger("Game")
+log:Info("Hello from %s!", "Lua")
+log:Warn("Low health: %d%%", 30)
+log:Error("Fatal error!")
 ]]

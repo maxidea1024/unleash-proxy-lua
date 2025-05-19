@@ -1,7 +1,7 @@
 local json = require("framework.3rdparty.feature-flags.dkjson")
 local sha2 = require("framework.3rdparty.feature-flags.sha2")
 
-local function urlEncode(str)
+local function UrlEncode(str)
   if str then
     str = string.gsub(str, "([^%w ])", function(c) return string.format("%%%02X", string.byte(c)) end)
     str = string.gsub(str, " ", "+")
@@ -9,7 +9,7 @@ local function urlEncode(str)
   return str
 end
 
-local function urlDecode(str)
+local function UrlDecode(str)
   str = string.gsub(str, "+", " ")
   str = string.gsub(str, "%%(%x%x)", function(h) return string.char(tonumber(h, 16)) end)
   return str
@@ -20,7 +20,7 @@ local function parseQueryString(query)
   for param in query:gmatch("([^&]+)") do
     local key, value = param:match("([^=]+)=(.+)")
     if key and value then
-      params[urlDecode(key)] = urlDecode(value)
+      params[UrlDecode(key)] = UrlDecode(value)
     end
   end
   return params
@@ -29,7 +29,7 @@ end
 local function buildQueryString(params)
   local parts = {}
   for key, value in pairs(params) do
-    table.insert(parts, urlEncode(key) .. "=" .. urlEncode(value))
+    table.insert(parts, UrlEncode(key) .. "=" .. UrlEncode(value))
   end
   return table.concat(parts, "&")
 end
@@ -61,7 +61,7 @@ local function computeSHA256(input)
   return binToHex(hashBin)
 end
 
-local function urlWithContextAsQuery(urlStr, context)
+local function UrlWithContextAsQuery(urlStr, context)
   local queryStart = urlStr:find("?")
   local baseUrl = queryStart and urlStr:sub(1, queryStart - 1) or urlStr
   local existingQuery = queryStart and urlStr:sub(queryStart + 1) or ""
@@ -100,7 +100,7 @@ local function contextString(context)
   return json.encode(data)
 end
 
-local function computeContextHashValue(context)
+local function ComputeContextHashValue(context)
   local contextStr = contextString(context)
   local success, hash = pcall(computeSHA256, contextStr)
   if success then
@@ -114,26 +114,26 @@ local function isTable(t)
   return type(t) == "table"
 end
 
-local function deepClone(...)
+local function DeepClone(...)
   local result = {}
 
   for i = 1, select("#", ...) do
-      local t = select(i, ...)
-      if isTable(t) then
-          for k, v in pairs(t) do
-              if isTable(v) and isTable(result[k]) then
-                  result[k] = deepClone(result[k], v)
-              else
-                  result[k] = v
-              end
-          end
+    local t = select(i, ...)
+    if isTable(t) then
+      for k, v in pairs(t) do
+        if isTable(v) and isTable(result[k]) then
+          result[k] = DeepClone(result[k], v)
+        else
+          result[k] = v
+        end
       end
+    end
   end
 
   return result
 end
 
-local function uuid()
+local function Uuid()
   local random = math.random
   local template = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'
   return string.gsub(template, '[xy]', function(c)
@@ -142,21 +142,21 @@ local function uuid()
   end)
 end
 
-local elementCountOfTable = function(t)
+local ElementCountOfTable = function(t)
   local count = 0
   for _ in pairs(t) do count = count + 1 end
   return count
 end
 
-local isEmptyTable = function(t)
+local IsEmptyTable = function(t)
   return not next(t)
 end
 
-local iso8601UtcNow = function()
+local Iso8601UtcNow = function()
   return os.date("!%Y-%m-%dT%H:%M:%SZ")
 end
 
-local iso8601UtcNowWithMSec = function()
+local Iso8601UtcNowWithMSec = function()
   local now = os.time() -- socket.gettime()
   local seconds = math.floor(now)
   local milliseconds = math.floor((now - seconds) * 1000)
@@ -164,7 +164,7 @@ local iso8601UtcNowWithMSec = function()
 end
 
 -- Utility function to calculate the hash value of a table or object
--- Usage: local hash = calculateHash(obj)
+-- Usage: local hash = CalculateHash(obj)
 --   - Computes the hash value of the given object (table or other value) and returns it as an integer.
 --   - For tables, it recursively traverses keys and values to generate the hash, while for non-table values, it converts them to strings to compute the hash.
 -- Parameters:
@@ -173,19 +173,19 @@ end
 --   - number: The computed integer hash value.
 -- Example:
 --   local tbl = { a = 1, b = "test" }
---   local hash = calculateHash(tbl) -- Returns an integer hash
---   local hash2 = calculateHash("simple") -- Returns the hash of a string
+--   local hash = CalculateHash(tbl) -- Returns an integer hash
+--   local hash2 = CalculateHash("simple") -- Returns the hash of a string
 -- Notes:
 --   - Circular references in tables are not handled (an error will be raised).
 --   - Complex objects (functions, userdata, etc.) rely on the tostring result.
-local function calculateHash(obj, seen)
+local function CalculateHash(obj, seen)
   -- Table to prevent circular references (nil on the first call)
   seen = seen or {}
 
   -- Raise an error if a circular reference is detected
   if type(obj) == "table" then
     if seen[obj] then
-      error("calculateHash: circular reference detected")
+      error("CalculateHash: circular reference detected")
     end
     seen[obj] = true
   end
@@ -205,7 +205,7 @@ local function calculateHash(obj, seen)
     -- Recursively convert keys and values to strings
     for _, k in ipairs(keys) do
       local v = obj[k]
-      str = str .. tostring(k) .. "=" .. tostring(calculateHash(v, seen)) .. ";"
+      str = str .. tostring(k) .. "=" .. tostring(CalculateHash(v, seen)) .. ";"
     end
   else
     -- Convert non-table values to strings
@@ -223,7 +223,7 @@ local function calculateHash(obj, seen)
   return math.floor(hash % 2 ^ 31)
 end
 
-local function findCaseInsensitive(t, key)
+local function FindCaseInsensitive(t, key)
   if type(key) ~= "string" then
     return t[key]
   end
@@ -251,7 +251,7 @@ end
     → /usr/local/bin (Unix)
 
  ]]
-local function pathJoin(...)
+local function PathJoin(...)
   -- Determine the directory separator for the current OS
   local sep = package.config:sub(1, 1) -- '/' (Unix) or '\' (Windows)
 
@@ -284,23 +284,23 @@ local function pathJoin(...)
   end
 end
 
-local function getTempDir()
+local function GetTempDir()
   return os.getenv("TMPDIR") or os.getenv("TEMP") or os.getenv("TMP") or "/tmp"
 end
 
 return {
-  urlWithContextAsQuery = urlWithContextAsQuery,
-  computeContextHashValue = computeContextHashValue,
-  deepClone = deepClone,
-  elementCountOfTable = elementCountOfTable,
-  isEmptyTable = isEmptyTable,
-  uuid = uuid,
-  iso8601UtcNow = iso8601UtcNow,
-  iso8601UtcNowWithMSec = iso8601UtcNowWithMSec,
-  calculateHash = calculateHash,
-  findCaseInsensitive = findCaseInsensitive,
-  pathJoin = pathJoin,
-  getTempDir = getTempDir,
-  urlEncode = urlEncode,
-  urlDecode = urlDecode,
+  UrlWithContextAsQuery = UrlWithContextAsQuery,
+  ComputeContextHashValue = ComputeContextHashValue,
+  DeepClone = DeepClone,
+  ElementCountOfTable = ElementCountOfTable,
+  IsEmptyTable = IsEmptyTable,
+  Uuid = Uuid,
+  Iso8601UtcNow = Iso8601UtcNow,
+  Iso8601UtcNowWithMSec = Iso8601UtcNowWithMSec,
+  CalculateHash = CalculateHash,
+  FindCaseInsensitive = FindCaseInsensitive,
+  PathJoin = PathJoin,
+  GetTempDir = GetTempDir,
+  UrlEncode = UrlEncode,
+  UrlDecode = UrlDecode,
 }

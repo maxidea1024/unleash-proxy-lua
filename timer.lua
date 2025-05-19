@@ -4,17 +4,17 @@
 local Timer = {}
 Timer.__index = Timer
 
-function Timer.new(loggerFactory)
+function Timer.New(loggerFactory)
   if not loggerFactory then error("`loggerFactory` is required") end
 
   local self = setmetatable({}, Timer)
   self.timers = {}
   self.co_pool = setmetatable({}, { __mode = "kv" })
-  self.logger = loggerFactory.createLogger("UnleashTimer")
+  self.logger = loggerFactory.CreateLogger("UnleashTimer")
   return self
 end
 
-function Timer:_insertTimer(sec, fn)
+function Timer:insertTimer(sec, fn)
   local expireAt = os.clock() + sec
   local pos = 1
   for i, v in ipairs(self.timers) do
@@ -29,7 +29,7 @@ function Timer:_insertTimer(sec, fn)
   return context
 end
 
-function Timer:_coresume(co, ...)
+function Timer:coresume(co, ...)
   local ok, err = coroutine.resume(co, ...)
   if not ok then
     self.logger:error(debug.traceback(co, err))
@@ -37,7 +37,7 @@ function Timer:_coresume(co, ...)
   return ok, err
 end
 
-function Timer:_routine(fn)
+function Timer:routine(fn)
   local co = coroutine.running()
   while true do
     fn()
@@ -46,15 +46,15 @@ function Timer:_routine(fn)
   end
 end
 
-function Timer:async(fn)
+function Timer:Async(fn)
   local co = table.remove(self.co_pool)
   if not co then
     co = coroutine.create(function()
-      self:_routine(fn)
+      self:routine(fn)
     end)
   end
 
-  local _, res = self:_coresume(co, fn)
+  local _, res = self:coresume(co, fn)
   if res then
     return res
   end
@@ -62,28 +62,28 @@ function Timer:async(fn)
   return co
 end
 
-function Timer:timeout(seconds, fn)
-  return self:_insertTimer(seconds, fn)
+function Timer:Timeout(seconds, fn)
+  return self:insertTimer(seconds, fn)
 end
 
-function Timer:sleep(seconds)
+function Timer:Sleep(seconds)
   local co = coroutine.running()
-  self:_insertTimer(seconds, function()
+  self:insertTimer(seconds, function()
     coroutine.resume(co)
   end)
 
   return coroutine.yield()
 end
 
-function Timer:remove(ctx)
+function Timer:Remove(ctx)
   ctx.remove = true
 end
 
-function Timer:removeAll()
+function Timer:RemoveAll()
   self.timers = {}
 end
 
-function Timer:tick()
+function Timer:Tick()
   local now = os.clock()
   while #self.timers > 0 do
     local timer = self.timers[1]

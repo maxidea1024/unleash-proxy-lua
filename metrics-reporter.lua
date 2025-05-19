@@ -2,11 +2,12 @@
 
 local json = require("framework.3rdparty.feature-flags.dkjson")
 local util = require("framework.3rdparty.feature-flags.util")
+local logger = require("framework.3rdparty.feature-flags.logger")
 
 local MetricsReporter = {}
 MetricsReporter.__index = MetricsReporter
 
-function MetricsReporter.new(config)
+function MetricsReporter.New(config)
   if not config.onError then error("`onError` is required") end
   if not config.appName then error("`appName` is required") end
   if not config.url then error("`url` is required") end
@@ -15,7 +16,7 @@ function MetricsReporter.new(config)
   if not config.loggerFactory then error("`loggerFactory` is required") end
 
   local self = setmetatable({}, MetricsReporter)
-  self.logger = config.loggerFactory:createLogger("UnleashMetricsReporter")
+  self.logger = config.loggerFactory:CreateLogger("UnleashMetricsReporter")
   self.onError = config.onError
   self.onSent = config.onSent or function() end
   self.disabled = config.disableMetrics or false
@@ -27,7 +28,7 @@ function MetricsReporter.new(config)
   self.clientKey = config.clientKey
   self.headerName = config.headerName or "Authorization"
   self.customHeaders = config.customHeaders or {}
-  self.bucket = self:_createEmptyBucket()
+  self.bucket = self:createEmptyBucket()
   self.timer = config.timer
   self.timerRunning = false
   self.backoffs = 0
@@ -35,7 +36,7 @@ function MetricsReporter.new(config)
   return self
 end
 
-function MetricsReporter:start()
+function MetricsReporter:Start()
   if self.disabled then
     return false
   end
@@ -43,7 +44,7 @@ function MetricsReporter:start()
   if type(self.metricsInterval) == "number" and self.metricsInterval > 0 then
     -- Check for already timer was started.
     if self.timerRunning then
-      self.logger:warn("Timer already running")
+      self.logger:Warn("Timer already running")
       return false
     end
 
@@ -51,16 +52,16 @@ function MetricsReporter:start()
 
     -- timeout으로 변경하자.
 
-    self.timer:async(function()
+    self.timer:Async(function()
       -- Initial delay before starting the metrics collection
       if self.metricsIntervalInitial > 0 then
-        self.timer:sleep(self.metricsIntervalInitial)
+        self.timer:Sleep(self.metricsIntervalInitial)
       end
 
       -- Start the metrics collection loop
       while self.timerRunning do
-        self:sendMetrics()
-        self.timer:sleep(self.metricsInterval)
+        self:SendMetrics()
+        self.timer:Sleep(self.metricsInterval)
       end
     end)
 
@@ -70,22 +71,22 @@ function MetricsReporter:start()
   return false
 end
 
-function MetricsReporter:stop()
+function MetricsReporter:Stop()
   if self.timerRunning then
     self.timerRunning = false
-    -- self.timer:tick() -- Update the timer to ensure it stops
+    -- self.timer:Tick() -- Update the timer to ensure it stops
   end
 end
 
-function MetricsReporter:_createEmptyBucket()
+function MetricsReporter:createEmptyBucket()
   return {
-    start = util.iso8601UtcNowWithMSec(),
+    start = util.Iso8601UtcNowWithMSec(),
     stop = nil,
     toggles = {},
   }
 end
 
-function MetricsReporter:_getHeaders()
+function MetricsReporter:getHeaders()
   local headers = {
     [self.headerName] = self.clientKey,
     Accept = "application/json",
@@ -102,25 +103,27 @@ function MetricsReporter:_getHeaders()
   return headers
 end
 
-function MetricsReporter:sendMetrics()
+function MetricsReporter:SendMetrics()
   local url = self.url .. "/client/metrics"
-  local payload = self:_getPayload()
+  local payload = self:getPayload()
 
-  if util.isEmptyTable(payload.bucket.toggles) then
+  if util.IsEmptyTable(payload.bucket.toggles) then
     return
   end
 
-  local headers = self:_getHeaders()
+  local headers = self:getHeaders()
 
-  self.logger:debug("Sending metrics: " .. json.encode({
-    url = url,
-    headers = headers,
-    payload = payload,
-  }))
+  if self.logger:IsEnabled(logger.LogLevel.Debug) then
+    self.logger:Debug("Sending metrics: " .. json.encode({
+      url = url,
+      headers = headers,
+      payload = payload,
+    }))
+  end
 
   local success, jsonBody = pcall(json.encode, payload)
   if not success then
-    self.logger:error("Failed to encode JSON: " .. tostring(jsonBody))
+    self.logger:Error("Failed to encode JSON: " .. tostring(jsonBody))
     self.onError(jsonBody)
     return
   end
@@ -145,30 +148,30 @@ function MetricsReporter:sendMetrics()
   end)
 end
 
-function MetricsReporter:count(name, enabled)
+function MetricsReporter:Count(name, enabled)
   if self.disabled or not self.bucket then
     return false
   end
 
-  self:_ensureBucketExists(name)
+  self:ensureBucketExists(name)
 
   local yesOrNo = enabled and "yes" or "no"
   self.bucket.toggles[name][yesOrNo] = self.bucket.toggles[name][yesOrNo] + 1
   return true
 end
 
-function MetricsReporter:countVariant(name, variant)
+function MetricsReporter:CountVariant(name, variant)
   if self.disabled or not self.bucket then
     return false
   end
 
-  self:_ensureBucketExists(name)
+  self:ensureBucketExists(name)
 
   self.bucket.toggles[name].variants[variant] = (self.bucket.toggles[name].variants[variant] or 0) + 1
   return true
 end
 
-function MetricsReporter:_ensureBucketExists(name)
+function MetricsReporter:ensureBucketExists(name)
   if self.disabled or not self.bucket then
     return false
   end
@@ -184,16 +187,16 @@ function MetricsReporter:_ensureBucketExists(name)
   return true
 end
 
-function MetricsReporter:_getPayload()
+function MetricsReporter:getPayload()
   -- take
   local bucket = {
     start = self.bucket.start,
-    stop = util.iso8601UtcNowWithMSec(),
+    stop = util.Iso8601UtcNowWithMSec(),
     toggles = self.bucket.toggles,
   }
 
   -- reset
-  self.bucket = self:_createEmptyBucket()
+  self.bucket = self:createEmptyBucket()
 
   return {
     bucket = bucket,

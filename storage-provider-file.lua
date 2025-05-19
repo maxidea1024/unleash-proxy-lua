@@ -4,20 +4,20 @@ local Util = require("framework.3rdparty.feature-flags.util")
 local FileStorageProvider = {}
 FileStorageProvider.__index = FileStorageProvider
 
-function FileStorageProvider.new(backupPath, prefix, loggerFactory)
+function FileStorageProvider.New(backupPath, prefix, loggerFactory)
   if not loggerFactory then error("`loggerFactory` is required") end
 
   local self = setmetatable({}, FileStorageProvider)
-  self.backupPath = backupPath or Util.getTempDir()
+  self.backupPath = backupPath or Util.GetTempDir()
   self.prefix = prefix or ""
-  self.logger = loggerFactory:createLogger("UnleashFileStorageProvider")
+  self.logger = loggerFactory:CreateLogger("UnleashFileStorageProvider")
   return self
 end
 
-function FileStorageProvider:save(key, data, callback)
+function FileStorageProvider:Save(key, data, callback)
   callback = callback or function(err) end
 
-  local filename = self:_getStorageFilename(key)
+  local filename = self:getStorageFilename(key)
   local success, jsonData = pcall(Json.encode, data)
   if not success or type(jsonData) ~= "string" then
     self.logger:error("Failed to encode JSON: " .. tostring(jsonData))
@@ -27,7 +27,7 @@ function FileStorageProvider:save(key, data, callback)
 
   local file, err = io.open(filename, "w")
   if not file then
-    self.logger:error("Failed to open file for writing: " .. tostring(err))
+    self.logger:Error("Failed to open file for writing: " .. tostring(err))
     callback(err)
     return
   end
@@ -37,7 +37,7 @@ function FileStorageProvider:save(key, data, callback)
     file:close()
   end)
   if not ok then
-    self.logger:error("Failed to write to file: " .. tostring(writeErr))
+    self.logger:Error("Failed to write to file: " .. tostring(writeErr))
     callback(writeErr)
     return
   end
@@ -45,14 +45,14 @@ function FileStorageProvider:save(key, data, callback)
   callback(nil)
 end
 
-function FileStorageProvider:get(key, callback)
-  local filename = self:_getStorageFilename(key)
+function FileStorageProvider:Get(key, callback)
+  local filename = self:getStorageFilename(key)
   local file, err = io.open(filename, "r")
   if not file then
     if err and err:match("No such file") then
       callback(nil, nil) -- No data found
     else
-      self.logger:error("Failed to open file for reading: " .. tostring(err))
+      self.logger:Error("Failed to open file for reading: " .. tostring(err))
       callback(nil, err)
     end
     return
@@ -64,7 +64,7 @@ function FileStorageProvider:get(key, callback)
     return data
   end)
   if not ok then
-    self.logger:error("Failed to read file: " .. tostring(rawData))
+    self.logger:Error("Failed to read file: " .. tostring(rawData))
     callback(nil, rawData)
     return
   end
@@ -76,7 +76,7 @@ function FileStorageProvider:get(key, callback)
 
   local success, data = pcall(Json.decode, rawData)
   if not success then
-    self.logger:error("Failed to decode JSON: " .. tostring(data))
+    self.logger:Error("Failed to decode JSON: " .. tostring(data))
     callback(nil, data)
     return
   end
@@ -84,17 +84,17 @@ function FileStorageProvider:get(key, callback)
   callback(data, nil)
 end
 
-function FileStorageProvider:saveSync(key, data)
-  local filename = self:_getStorageFilename(key)
+function FileStorageProvider:SaveSync(key, data)
+  local filename = self:getStorageFilename(key)
   local success, jsonData = pcall(Json.encode, data)
   if not success or type(jsonData) ~= "string" then
-    self.logger:error("Failed to encode JSON: " .. tostring(jsonData))
+    self.logger:Error("Failed to encode JSON: " .. tostring(jsonData))
     return false, jsonData
   end
 
   local file, err = io.open(filename, "w")
   if not file then
-    self.logger:error("Failed to open file for writing: " .. tostring(err))
+    self.logger:Error("Failed to open file for writing: " .. tostring(err))
     return false, err
   end
 
@@ -103,21 +103,21 @@ function FileStorageProvider:saveSync(key, data)
     file:close()
   end)
   if not ok then
-    self.logger:error("Failed to write to file: " .. tostring(writeErr))
+    self.logger:Error("Failed to write to file: " .. tostring(writeErr))
     return false, writeErr
   end
 
   return true, nil
 end
 
-function FileStorageProvider:getSync(key)
-  local filename = self:_getStorageFilename(key)
+function FileStorageProvider:GetSync(key)
+  local filename = self:getStorageFilename(key)
   local file, err = io.open(filename, "r")
   if not file then
     if err and err:match("No such file") then
       return nil, nil -- No data found
     else
-      self.logger:error("Failed to open file for reading: " .. tostring(err))
+      self.logger:Error("Failed to open file for reading: " .. tostring(err))
       return nil, err
     end
 
@@ -130,7 +130,7 @@ function FileStorageProvider:getSync(key)
     return data
   end)
   if not ok then
-    self.logger:error("Failed to read file: " .. tostring(rawData))
+    self.logger:Error("Failed to read file: " .. tostring(rawData))
     return nil, rawData
   end
 
@@ -140,14 +140,14 @@ function FileStorageProvider:getSync(key)
 
   local success, data = pcall(Json.decode, rawData)
   if not success then
-    self.logger:error("Failed to decode JSON: " .. tostring(data))
+    self.logger:Error("Failed to decode JSON: " .. tostring(data))
     return nil, data
   end
 
   return data, nil
 end
 
-function FileStorageProvider:_getStorageFilename(key)
+function FileStorageProvider:getStorageFilename(key)
   local prefix
   if self.prefix and #self.prefix > 0 then
     prefix = self.prefix .. "-"
@@ -155,7 +155,7 @@ function FileStorageProvider:_getStorageFilename(key)
     prefix = ""
   end
 
-  local filename = Util.pathJoin(self.backupPath, prefix .. key .. ".json")
+  local filename = Util.PathJoin(self.backupPath, prefix .. key .. ".json")
   return filename
 end
 
