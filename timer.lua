@@ -10,7 +10,7 @@ function Timer.new(loggerFactory)
   local self = setmetatable({}, Timer)
   self.timers = {}
   self.co_pool = setmetatable({}, { __mode = "kv" })
-  self.logger = loggerFactory.createLogger("Timer")
+  self.logger = loggerFactory.createLogger("UnleashTimer")
   return self
 end
 

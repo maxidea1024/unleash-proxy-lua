@@ -6,7 +6,7 @@ function InMemoryStorageProvider.new(loggerFactory)
 
   local self = setmetatable({}, InMemoryStorageProvider)
   self.store = {}
-  self.logger = loggerFactory:createLogger("InMemoryStorageProvider")
+  self.logger = loggerFactory:createLogger("UnleashInMemoryStorageProvider")
   return self
 end
 

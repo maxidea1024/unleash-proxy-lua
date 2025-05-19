@@ -31,7 +31,7 @@ EventSystem.__index = EventSystem
 
 function EventSystem.new(loggerFactory)
   local self = setmetatable({}, EventSystem)
-  self.logger = loggerFactory:createLogger("EventSystem")
+  self.logger = loggerFactory:createLogger("UnleashEventSystem")
   self.events = createCaseInsensitiveTable()
   return self
 end

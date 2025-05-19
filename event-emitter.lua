@@ -33,7 +33,7 @@ end
 
 function EventEmitter.new(loggerFactory)
   local self = setmetatable({}, EventEmitter)
-  self.logger = loggerFactory:createLogger("EventEmitter")
+  self.logger = loggerFactory:createLogger("UnleashEventEmitter")
   self._on = {}
   return self
 end

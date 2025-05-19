@@ -15,7 +15,7 @@ function MetricsReporter.new(config)
   if not config.loggerFactory then error("`loggerFactory` is required") end
 
   local self = setmetatable({}, MetricsReporter)
-  self.logger = config.loggerFactory:createLogger("MetricsReporter")
+  self.logger = config.loggerFactory:createLogger("UnleashMetricsReporter")
   self.onError = config.onError
   self.onSent = config.onSent or function() end
   self.disabled = config.disableMetrics or false

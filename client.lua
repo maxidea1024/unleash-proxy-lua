@@ -10,7 +10,6 @@ local EventSystem = require("framework.3rdparty.feature-flags.event-system")
 local Util = require("framework.3rdparty.feature-flags.util")
 local Logger = require("framework.3rdparty.feature-flags.logger")
 local Events = require("framework.3rdparty.feature-flags.events")
-local Backoff = require("framework.3rdparty.feature-flags.backoff")
 
 local DEFINED_FIELDS = {
   "userId",
@@ -19,7 +18,6 @@ local DEFINED_FIELDS = {
   "currentTime"
 }
 
--- 개선: 이것뿐만 아니라 추가적으로 static context field 목록을 관리하는게 좋을것 같다.
 local STATIC_CONTEXT_FIELDS = {
   "appName",
   "environment",
@@ -71,6 +69,23 @@ local function isDefinedContextField(fieldName)
   return false
 end
 
+local function convertToggleArrayToMap(togglesArray)
+  local toggleMap = {}
+  for _, toggle in ipairs(togglesArray) do
+    toggleMap[toggle.name] = toggle
+  end
+  return toggleMap
+end
+
+local function _makeDisabledToggle(name)
+  return {
+    name = name,
+    enabled = false,
+    variant = DEFAULT_DISABLED_VARIANT,
+    impressionData = false,
+  }
+end
+
 ------------------------------------------------------------------
 -- Client implementation
 ------------------------------------------------------------------
@@ -81,22 +96,22 @@ Client.__index = Client
 function Client.new(config)
   local self = setmetatable({}, Client)
 
+  --TODO enableDevMode
+
   self.loggerFactory = config.loggerFactory or Logger.DefaultLoggerFactory.new(Logger.LogLevel.Log)
-  self.logger = self.loggerFactory:createLogger("Client")
+  self.logger = self.loggerFactory:createLogger("UnleashClient")
 
   self.offline = config.offline or false
-  self.toggles = config.bootstrap or {}
-  self:_updateTogglesMap()
-
-  if self.offline then
-    return self
-  end
+  self.toggleMap = convertToggleArrayToMap(config.bootstrap or {})
 
   -- Validate required fields
   if not config.appName then error("`appName` is required") end
-  if not config.url then error("`url` is required") end
-  if not config.request then error("`request` is required") end
-  if not config.clientKey then error("`clientKey` is required") end
+
+  if not self.offline then
+    if not config.url then error("`url` is required") end
+    if not config.request then error("`request` is required") end
+    if not config.clientKey then error("`clientKey` is required") end
+  end
 
   self.context = {
     -- static context
@@ -116,13 +131,16 @@ function Client.new(config)
   self.headerName = config.headerName or "Authorization"
   self.customHeaders = config.customHeaders or {}
 
+  -- Explicit synchronization mode
+  self.useExplicitSyncMode = config.useExplicitSyncMode or false
+  self.synchronizedToggleMap = Util.deepClone(self.toggleMap)
+
   self.storage = config.storageProvider or InMemoryStorageProvider.new(self.loggerFactory)
   self.impressionDataAll = config.impressionDataAll or false
   self.refreshInterval = (config.disableRefresh and 0) or (config.refreshInterval or 30)
   self.request = config.request
   self.usePOSTrequests = config.usePOSTrequests or false
   self.sdkState = "initializing"
-  self.backoffs = 0
   self.experimental = Util.deepClone(config.experimental or {})
 
   self.lastRefreshTimestamp = 0
@@ -138,31 +156,34 @@ function Client.new(config)
   self.eventSystem = EventSystem.new(self.loggerFactory)
 
   self.timer = Timer.new(self.loggerFactory)
-  self.timerRunning = false
+  self.fetchTimer = nil
 
-  self.metricsReporter = MetricsReporter.new({
-    appName = config.appName,
-    url = self.url,
-    request = self.request,
-    clientKey = config.clientKey,
-    headerName = self.headerName,
-    customHeaders = self.customHeaders,
-    disableMetrics = config.disableMetrics or false,
-    metricsIntervalInitial = config.metricsIntervalInitial or 2,
-    metricsInterval = config.metricsInterval or 30,
-    onError = function(err) self:_emit(Events.ERROR, err) end,
-    onSent = function(data) self:_emit(Events.SENT, data) end,
-    timer = self.timer,
-    loggerFactory = self.loggerFactory,
-  })
+  if not self.offline then
+    self.metricsReporter = MetricsReporter.new({
+      appName = config.appName,
+      url = self.url,
+      request = self.request,
+      clientKey = config.clientKey,
+      headerName = self.headerName,
+      customHeaders = self.customHeaders,
+      disableMetrics = config.disableMetrics or false,
+      metricsIntervalInitial = config.metricsIntervalInitial or 2,
+      metricsInterval = config.metricsInterval or 30,
+      onError = function(err) self:_emit(Events.ERROR, err) end,
+      onSent = function(data) self:_emit(Events.SENT, data) end,
+      timer = self.timer,
+      loggerFactory = self.loggerFactory,
+    })
+  end
 
-  -- backoff 설정
+  -- setup backoff
   self.backoffParams = {
     min = config.backoff and config.backoff.min or 1,        -- 1초부터 시작
     max = config.backoff and config.backoff.max or 10,       -- 10초까지 증가
     factor = config.backoff and config.backoff.factor or 2,  -- exponential backoff
     jitter = config.backoff and config.backoff.jitter or 0.2 -- 20% jitter
   }
+  self.failures = 0
 
   -- auto start
   if config.disableAutoStart ~= true then
@@ -173,44 +194,49 @@ function Client.new(config)
   return self
 end
 
-function Client:_updateTogglesMap()
-  self.togglesMap = {}
-  for _, toggle in ipairs(self.toggles) do
-    self.togglesMap[toggle.name] = toggle
+function Client:waitForReady(callback)
+  if self.readyEventEmitted then
+    self:_safeCallCallback(callback)
+  else
+    self:on(Events.READY, function()
+      self:_safeCallCallback(callback)
+    end)
   end
 end
 
--- 활성화된 플래그들만 반환하므로, 이름을 바꿔주는게 좋을듯..
-function Client:getAllToggles()
+function Client:getAllEnabledToggles()
+  local toggleMap = self:_selectToggleMap()
+
   local result = {}
-  for _, toggle in ipairs(self.toggles) do
-    local flag = {
+  for _, toggle in pairs(toggleMap) do
+    table.insert(result, {
       name = toggle.name,
       enabled = toggle.enabled,
       variant = toggle.variant,
       impressionData = toggle.impressionData
-    }
-    table.insert(result, flag)
+    })
   end
   return result
 end
 
-function Client:isEnabled(key)
-  if not key or type(key) ~= "string" or string.len(key) == 0 then
-    self.logger:error("`key` is required")
+function Client:isEnabled(featureName)
+  if not featureName or type(featureName) ~= "string" or string.len(featureName) == 0 then
+    self.logger:error("`featureName` is required")
     return false
   end
 
-  local toggle = self.togglesMap[key]
+  local toggleMap = self:_selectToggleMap()
+
+  local toggle = toggleMap[featureName]
   local enabled = (toggle and toggle.enabled) or false
-  self.metricsReporter:count(key, enabled)
+  self.metricsReporter:count(featureName, enabled)
 
   local impressionData = self.impressionDataAll or (toggle and toggle.impressionData)
   if impressionData then
     local event = createImpressionEvent(
       self.context,
       enabled,
-      key,
+      featureName,
       IMPRESSION_EVENTS.IS_ENABLED,
       (toggle and toggle.impressionData) or nil,
       nil -- variant name is not applicable here
@@ -221,28 +247,30 @@ function Client:isEnabled(key)
   return enabled
 end
 
-function Client:getVariant(key)
-  if not key or type(key) ~= "string" or string.len(key) == 0 then
-    self.logger:warn("`key` is required")
+function Client:getVariant(featureName)
+  if not featureName or type(featureName) ~= "string" or string.len(featureName) == 0 then
+    self.logger:warn("`featureName` is required")
     return DEFAULT_DISABLED_VARIANT
   end
 
-  local toggle = self.togglesMap[key]
+  local toggleMap = self:_selectToggleMap()
+
+  local toggle = toggleMap[featureName]
   local enabled = (toggle and toggle.enabled) or false
   local variant = (toggle and toggle.variant) or DEFAULT_DISABLED_VARIANT
 
   if variant.name then
-    self.metricsReporter:countVariant(key, variant.name)
+    self.metricsReporter:countVariant(featureName, variant.name)
   end
 
-  self.metricsReporter:count(key, enabled)
+  self.metricsReporter:count(featureName, enabled)
 
   local impressionData = self.impressionDataAll or (toggle and toggle.impressionData)
   if impressionData then
     local event = createImpressionEvent(
       self.context,
       enabled,
-      key,
+      featureName,
       IMPRESSION_EVENTS.GET_VARIANT,
       (toggle and toggle.impressionData) or nil,
       variant.name
@@ -258,45 +286,59 @@ function Client:getVariant(key)
   }
 end
 
-function Client:updateToggles(callback)
-  if self.offline then
-    if callback then
-      callback()
-    end
+-- Helper function to safely call user callbacks
+function Client:_safeCallCallback(callback, ...)
+  if not callback or type(callback) ~= "function" then
     return
   end
 
-  callback = callback or function() end
+  local success, result = pcall(callback, ...)
+  if not success then
+    self.logger:error("Error in user callback: %s", tostring(result))
 
-  -- 이미 한번이상 서버에서 플래그들을 가져온
-  -- 상태일 경우에는 fetchToggles() 만 수행함.
-  if self.timerRunning or self.fetchedFromServer then
+    self:_emit(Events.ERROR, {
+      type = "CallbackError",
+      message = tostring(result)
+    })
+  end
+  return success, result
+end
+
+function Client:updateToggles(callback)
+  if self.offline then
+    self:_safeCallCallback(callback)
+    return
+  end
+
+  if self.fetchTimer ~= nil or self.fetchedFromServer then
+    self:_cancelFetchTimer()
     self:_fetchToggles(callback)
     return
   end
 
   if self.started then
     self:once(Events.READY, function()
+      self:_cancelFetchTimer()
       self:_fetchToggles(function()
-        callback()
+        self:_safeCallCallback(callback)
       end)
     end)
   else
-    -- 아직 start가 안된 상태에서는 어짜피 start후에 fetchToggles를
-    -- 할것이기 때문에 fetchToggles를 생략한다.
-    callback()
+    -- If not started yet, we'll fetch toggles after start anyway,
+    -- so we can skip fetching toggles here.
+    self:_safeCallCallback(callback)
   end
 end
 
--- fetch 중인 상태에서 updateContext()를 호출하게 되면 어떻게되나?
 function Client:updateContext(context, callback)
   if self.offline then
+    self:_safeCallCallback(callback)
     return
   end
 
   for _, field in ipairs(STATIC_CONTEXT_FIELDS) do
     if context[field] then
-      self.logger:warn("`" .. field .. "` is a static field name. It can't be updated with updateContext.")
+      self.logger:warn("`%s` is a static field name. It can't be updated with updateContext.", field)
     end
   end
 
@@ -306,11 +348,13 @@ function Client:updateContext(context, callback)
     sessionId = self.context.sessionId,
   }
 
+  -- TODO If there are no changes in the context, return
+
   self.context = Util.deepClone(staticContext, context)
 
-  self.logger:debugLambda(function()
-    return "Context is updated: " .. Json.encode(self.context)
-  end)
+  if self.logger:isEnabled(Logger.LogLevel.Debug) then
+    self.logger:debug("Context is updated: %s", Json.encode(self.context))
+  end
 
   self:updateToggles(callback)
 end
@@ -321,9 +365,7 @@ end
 
 function Client:setContextField(field, value, callback)
   if self.offline then
-    if callback then
-      callback()
-    end
+    self:_safeCallCallback(callback)
     return
   end
 
@@ -347,28 +389,26 @@ function Client:setContextField(field, value, callback)
   if changed then
     self:updateToggles(callback)
   else
-    if callback then
-      callback()
-    end
+    self:_safeCallCallback(callback)
   end
 end
 
 function Client:removeContextField(field, callback)
   if self.offline then
-    if callback then
-      callback()
-    end
+    self:_safeCallCallback(callback)
     return
   end
 
   if isDefinedContextField(field) then
     if not self.context[field] then
+      self:_safeCallCallback(callback)
       return
     end
 
     self.context[field] = nil
   elseif self.context.properties and type(self.context.properties) == "table" then
     if not self.context.properties[field] then
+      self:_safeCallCallback(callback)
       return
     end
 
@@ -379,19 +419,23 @@ function Client:removeContextField(field, callback)
 end
 
 function Client:_setReady()
-  self.readyEventEmitted = true
-  self:_emit(Events.READY)
+  if not self.readyEventEmitted then
+    self.readyEventEmitted = true
+    self:_emit(Events.READY)
+  end
 end
 
 function Client:_init(callback)
-  self.logger:debug("Try bootstrapping...")
+  self.logger:debug("Initializing...")
 
   self:_resolveSessionId(function(sessionId)
     self.context.sessionId = sessionId
 
     self.storage:get(TOGGLES_KEY, function(toggles)
-      self.toggles = toggles or {}
-      self:_updateTogglesMap()
+      self.toggleMap = convertToggleArrayToMap(toggles or {})
+      if self.useExplicitSyncMode then
+        self.synchronizedToggleMap = Util.deepClone(self.toggleMap)
+      end
 
       self.storage:get(ETAG_KEY, function(etag)
         self.etag = etag
@@ -400,50 +444,45 @@ function Client:_init(callback)
       self:_loadLastRefreshTimestamp(function(timestamp)
         self.lastRefreshTimestamp = timestamp
 
-        if self.bootstrap and (self.bootstrapOverride or #self.toggles == 0) then
+        if self.bootstrap and (self.bootstrapOverride or Util.isEmptyTable(self.toggleMap)) then
           self.storage:save(TOGGLES_KEY, self.bootstrap, function()
-            self.toggles = self.bootstrap
-            self:_updateTogglesMap()
-
+            self.toggleMap = convertToggleArrayToMap(self.bootstrap)
+            if self.useExplicitSyncMode then
+              self.synchronizedToggleMap = Util.deepClone(self.toggleMap)
+            end
             self.sdkState = "healthy"
             self.etags = nil
 
             self:_storeLastRefreshTimestamp(function()
+              -- _setReady() 가 먼저인가?
               self:_setReady()
               self:_emit(Events.INIT)
-              callback()
+              self:_safeCallCallback(callback)
             end)
           end)
         else
           self.sdkState = "healthy"
           self:_emit(Events.INIT)
-          callback()
+          self:_safeCallCallback(callback)
         end
       end)
     end)
   end)
 end
 
+-- TODO callback 인자로 error를 전달해주는게 좋을듯
 function Client:start(callback)
-  if self.offline then
-    if callback then
-      callback()
-    end
+  if self.started then
+    -- TODO error 이벤트를 발생시켜줘야하나?
+
+    self.logger:error("Client has already started, call stop() before restarting.")
+    self:_safeCallCallback(callback)
     return
   end
-
-  callback = callback or function() end
 
   self.started = true
 
-  if self.timerRunning then
-    self.logger:error("Client has already started, call stop() before restarting.")
-    callback()
-    return
-  end
-
   -- initialize asynchronously with a callback
-  -- bootstrapping?
   self:_init(function(err)
     if err then
       self.logger:error(tostring(err))
@@ -454,26 +493,32 @@ function Client:start(callback)
     end
 
     -- initial fetch toggles
-    self:_initialFetchToggles(function()
-      self.logger:info("Client is started. (environment=`" .. self.context.environment .. "`)")
+    if not self.offline then
+      self:_initialFetchToggles(function()
+        self.logger:info("Client is started. (environment=%s)", self.context.environment)
 
-      self.metricsReporter:start()
+        self.metricsReporter:start()
 
-      callback()
-    end)
+        self:_safeCallCallback(callback)
+      end)
+    else
+      self.logger:info("Client is started as OFFLINE mode. (environment=%s)", self.context.environment)
+      self:_setReady()
+    end
   end)
 end
 
 function Client:_handleErrorCases(url, statusCode)
-  if statusCode == 401 or statusCode == 403 then
+  if statusCode == 401 or     -- unauthorized
+      statusCode == 403 then  -- forbidden
     return self:_handleConfigurationError(url, statusCode)
-  elseif statusCode == 404 or
-      statusCode == 429 or
-      statusCode == 500 or
-      statusCode == 502 or
-      statusCode == 503 or
-      statusCode == 504 then
-    return self:_handleReceoverableError(url, statusCode)
+  elseif statusCode == 404 or -- not found
+      statusCode == 429 or    -- too many request
+      statusCode == 500 or    -- internal server error
+      statusCode == 502 or    -- bad gate way
+      statusCode == 503 or    -- service unavailable
+      statusCode == 504 then  -- gateway timeout
+    return self:_handleRecoverableError(url, statusCode)
   else
     return self.refreshInterval
   end
@@ -482,16 +527,16 @@ end
 function Client:_handleConfigurationError(url, statusCode)
   self.failures = self.failures + 1
 
-  if statusCode == 401 or statusCode == 403 then
-    self:_emit(Events.ERROR, {
-      type = "ConfigurationError",
-      message = url ..
-          " responded " ..
-          statusCode .. " which means your API key is not allowed to connect. Stopping refresh of toggles",
-      code = statusCode,
-    })
-  end
+  self:_emit(Events.ERROR, {
+    type = "ConfigurationError",
+    message = url ..
+        " responded " ..
+        statusCode .. " which means your API key is not allowed to connect. Stopping refresh of toggles",
+    code = statusCode,
+  })
 
+  -- stop fetching
+  self.logger:error("No more fetches will be performed. Please check that the token for API calls is correct!")
   return 0
 end
 
@@ -502,18 +547,18 @@ function Client:_handleRecoverableError(url, statusCode)
     self:_emit(Events.ERROR, {
       type = "RateLimitError",
       message = url ..
-      " responded " ..
-      statusCode ..
-      " which means you are being rate limited. Stopping refresh of toggles for " .. nextFetchDelay .. " seconds",
+          " responded " ..
+          statusCode ..
+          " which means you are being rate limited. Stopping refresh of toggles for " .. nextFetchDelay .. " seconds",
       code = statusCode,
     })
   elseif statusCode == 404 then -- not found
     self:_emit(Events.ERROR, {
       type = "NotFoundError",
       message = url ..
-      " responded " ..
-      statusCode ..
-      " which means the resource was not found. Stopping refresh of toggles for " .. nextFetchDelay .. " seconds",
+          " responded " ..
+          statusCode ..
+          " which means the resource was not found. Stopping refresh of toggles for " .. nextFetchDelay .. " seconds",
       code = statusCode,
     })
   elseif statusCode == 500 or -- internal server error
@@ -523,9 +568,9 @@ function Client:_handleRecoverableError(url, statusCode)
     self:_emit(Events.ERROR, {
       type = "ServerError",
       message = url ..
-      " responded " ..
-      statusCode ..
-      " which means the server is having issues. Stopping refresh of toggles for " .. nextFetchDelay .. " seconds",
+          " responded " ..
+          statusCode ..
+          " which means the server is having issues. Stopping refresh of toggles for " .. nextFetchDelay .. " seconds",
       code = statusCode,
     })
   end
@@ -533,39 +578,54 @@ function Client:_handleRecoverableError(url, statusCode)
   return nextFetchDelay
 end
 
-function Client:_nextFetch()
-  -- local ms = self.min * math.pow(self.factor, self.attempts)
-  -- self.attempts = self.attempts + 1
+function Client:_getNextFetchDelay()
+  local delay = self.refreshInterval
+  local extra = 0
+  if self.failures > 0 then
+    extra = math.pow(2, self.failures)
 
-  -- if self.jitter > 0 then
-  --   local rand = math.random() * 2 - 1
-  --   ms = ms + rand * self.jitter * ms
-  -- end
+    if self.backoffParams.jitter > 0 then
+      local rand = math.random() * 2 - 1
+      extra = extra + rand * self.backoffParams.jitter * extra
+    end
 
-  -- return math.min(ms, self.max)
+    extra = math.min(extra, self.backoffParams.max)
+    extra = math.max(extra, self.backoffParams.min)
+  end
 
-  -- TODO 지수, jitter처리
-  return self.refreshInterval + self.failures * self.refreshInterval
+  return delay + extra
 end
 
 function Client:_backoff()
   self.failures = math.min(self.failures + 1, 10)
-  return self:_nextFetch()
+  return self:_getNextFetchDelay()
 end
 
 function Client:_countSuccess()
   self.failures = math.max(self.failures - 1, 0)
-  return self:_nextFetch()
+  return self:_getNextFetchDelay()
 end
 
 function Client:_timedFetch(interval)
+  -- interval이 0보다 작거나 같으면, timer를 예약하지 않음.
+  -- (의도된 동작임. 복구 불가능한 에러가 발생했을 경우에는 더이상 시도하지 않음. 토큰 오류 같은 경우)
+
   -- if interval > 0 and self.mode.type == "polling" then
   if interval > 0 then
     self.logger:debug("Timed fetching toggles in " .. interval .. " seconds.")
 
-    self.timer:timeout(interval, function()
+    self.fetchTimer = self.timer:timeout(interval, function()
       self:_fetchToggles(function(err) end)
     end)
+  end
+end
+
+function Client:_cancelFetchTimer()
+  if self.fetchTimer then
+    self.logger:debug("Cancel fetch timer.");
+
+    self.timer:remove(self.fetchTimer)
+    self.fetchTimer = nil
   end
 end
 
@@ -579,14 +639,11 @@ function Client:stop()
     return
   end
 
-  -- timeout context를 가지고 있다가, 그걸로 중지처리하던지..
-  -- 그냥 모두 중지 처리하던지...
-  if self.timerRunning then
-    self.timerRunning = false
-    self.timer:removeAll() -- 모든 timer callback을 강제 취소시킴
-  end
+  self:_cancelFetchTimer()
 
   self.metricsReporter:stop()
+
+  self.timer:removeAll()
 
   self.started = false
 
@@ -615,7 +672,7 @@ end
 
 function Client:_resolveSessionId(callback)
   if self.context.sessionId then
-    callback(self.context.sessionId)
+    self:_safeCallCallback(callback, self.context.sessionId)
     return
   end
 
@@ -624,10 +681,10 @@ function Client:_resolveSessionId(callback)
       sessionId = tostring(math.random(1, 1000000000))
       -- sessionId = Util.uuid()
       self.storage:save(SESSION_ID_KEY, sessionId, function()
-        callback(sessionId)
+        self:_safeCallCallback(callback, sessionId)
       end)
     else
-      callback(sessionId)
+      self:_safeCallCallback(callback, sessionId)
     end
   end)
 end
@@ -655,44 +712,28 @@ function Client:_getHeaders()
   return headers
 end
 
-local function _findToggleInArray(array, name)
-  for _, item in ipairs(array) do
-    if item and item.name == name then
-      return item
-    end
-  end
-  return nil
-end
-
-local function _makeDisabledToggle(name)
-  return {
-    name = name,
-    enabled = false,
-    variant = DEFAULT_DISABLED_VARIANT,
-    impressionData = false,
-  }
-end
-
 function Client:_storeToggles(toggles, callback)
-  local oldToggles = self.toggles or {}
-  local newToggles = toggles or {}
+  local newToggleArray = toggles or {}
 
-  self.toggles = newToggles
-  self:_updateTogglesMap()
+  local oldToggleMap = self.toggleMap or {}
+  local newToggleMap = convertToggleArrayToMap(newToggleArray)
 
-  self:_emit(Events.UPDATE, newToggles)
-  self.storage:save(TOGGLES_KEY, newToggles, callback)
+  if self.logger:isEnabled(Logger.LogLevel.Debug) then
+    self.logger:debug("Toggles updated: oldToggles=%s", Json.encode(oldToggleMap))
+    self.logger:debug("Toggles updated: newToggles=%s", Json.encode(newToggleMap))
+  end
 
-  self.logger:debugLambda(function() return "Toggles updated: oldToggles=" .. Json.encode(oldToggles) end)
-  self.logger:debugLambda(function() return "Toggles updated: newToggles=" .. Json.encode(newToggles) end)
+  self.toggleMap = newToggleMap
 
-  -- if self.hasPreviousStates then
+  self:_emit(Events.UPDATE, newToggleArray)
+  self.storage:save(TOGGLES_KEY, newToggleArray, callback)
+
   -- Detects disabled flags
-  for _, oldToggle in ipairs(oldToggles) do
-    local newToggle = _findToggleInArray(newToggles, oldToggle.name)
+  for _, oldToggle in pairs(oldToggleMap) do
+    local newToggle = newToggleMap[oldToggle.name]
     local toggleIsDisabled = newToggle == nil
     if toggleIsDisabled then
-      self.logger:info("Feature flag `" .. oldToggle.name .. "` is disabled.")
+      self.logger:info("Feature flag `%s` is disabled.", oldToggle.name)
 
       if self.eventSystem:isWatchingEvent(oldToggle.name) then
         local disabledToggle = _makeDisabledToggle(oldToggle.name)
@@ -702,14 +743,15 @@ function Client:_storeToggles(toggles, callback)
   end
 
   -- Detects enabled or variant changed flags
-  for _, newToggle in ipairs(newToggles) do
+  for _, newToggle in pairs(newToggleMap) do
     local emitEvent = false
-    local oldToggle = _findToggleInArray(oldToggles, newToggle.name)
+
+    local oldToggle = oldToggleMap[newToggle.name]
     if not oldToggle then
-      self.logger:info("Feature flag `" .. newToggle.name .. "` is enabled.")
+      self.logger:info("Feature flag `%s` is enabled.", newToggle.name)
       emitEvent = true
     elseif Util.calculateHash(oldToggle) ~= Util.calculateHash(newToggle) then
-      self.logger:info("Feature flag `" .. newToggle.name .. "` is enabled and variants changed.")
+      self.logger:info("Feature flag `%s` is enabled and variants changed.", newToggle.name)
       emitEvent = true
     end
 
@@ -719,10 +761,6 @@ function Client:_storeToggles(toggles, callback)
       end
     end
   end
-  -- else
-  --   self.hasPreviousStates = true
-  --   self.logger:debugLambda(function() return "Initial enabled toggles: " .. Json.encode(self.toggles) end)
-  -- end
 end
 
 function Client:_isTogglesStorageTTLEnabled()
@@ -746,10 +784,10 @@ function Client:_loadLastRefreshTimestamp(callback)
     self.storage:get(LAST_UPDATE_KEY, function(lastRefresh)
       local contextHash = Util.computeContextHashValue(self.context)
       local timestamp = (lastRefresh and lastRefresh.key == contextHash) and lastRefresh.timestamp or 0
-      callback(timestamp)
+      self:_safeCallCallback(callback, timestamp)
     end)
   else
-    callback(0)
+    self:_safeCallCallback(callback, 0)
   end
 end
 
@@ -763,7 +801,7 @@ function Client:_storeLastRefreshTimestamp(callback)
     }
     self.storage:save(LAST_UPDATE_KEY, lastUpdateValue, callback)
   else
-    callback()
+    self:_safeCallCallback(callback)
   end
 end
 
@@ -778,11 +816,16 @@ function Client:_initialFetchToggles(callback)
 
     self:_timedFetch(self.refreshInterval)
 
-    callback()
-    return
-  end
+    self:_safeCallCallback(callback)
+  else
+    self:_fetchToggles(function(err)
+      if not err and self.useExplicitSyncMode then
+        self.synchronizedToggleMap = Util.deepClone(self.toggleMap)
+      end
 
-  self:_fetchToggles(callback)
+      self:_safeCallCallback(callback, err)
+    end)
+  end
 end
 
 function Client:_fetchToggles(callback)
@@ -798,9 +841,9 @@ function Client:_fetchToggles(callback)
     headers["Content-Length"] = body and #body or 0
   end
 
-  self.logger:debugLambda(function()
-    return "Fetch feature flags: " .. Json.encode(Util.urlDecode(url))
-  end)
+  if self.logger:isEnabled(Logger.LogLevel.Debug) then
+    self.logger:debug("Fetch feature flags: %s", Json.encode(Util.urlDecode(url)))
+  end
 
   self.request(url, method, headers, body, function(response)
     if self.sdkState == "error" and response.status < 400 then
@@ -809,19 +852,24 @@ function Client:_fetchToggles(callback)
     end
 
     if response.status >= 200 and response.status < 300 then
-      self.etag = Util.findCaseInsensitive(response.headers, "ETag") or ""
+      self.etag = Util.findCaseInsensitive(response.headers, "ETag") or nil
 
       local data, err = Json.decode(response.body)
       if not data then
-        self.logger:error("JSON decode failed: " .. tostring(err))
+        self.logger:error("JSON decode failed: %s", tostring(err))
+
+        local error = {
+          type = "JsonError",
+          message = tostring(err)
+        }
 
         self.sdkState = "error"
-        self:_emit(Events.ERROR, { type = "JsonError", message = tostring(err) })
-        self.lastError = { type = "JsonError", message = tostring(err) }
+        self:_emit(Events.ERROR, error)
+        self.lastError = error
 
-        if callback then
-          callback({ type = "JsonError", message = tostring(err) })
-        end
+        self:_safeCallCallback(callback, error)
+
+        -- stop fetching
         return
       end
 
@@ -837,36 +885,31 @@ function Client:_fetchToggles(callback)
         end
 
         self:_storeLastRefreshTimestamp(function()
-          if callback then
-            callback() -- 성공 시 오류 없이 콜백
-          end
+          self.storage:save(ETAG_KEY, self.etag, function()
+            local nextFetchDelay = self:_countSuccess()
+            self:_timedFetch(nextFetchDelay)
+
+            self:_safeCallCallback(callback, nil)
+          end)
         end)
-
-        self.storage:save(ETAG_KEY, self.etag)
-
-        self:_timedFetch(self.refreshInterval)
       end)
     elseif response.status == 304 then
-      self.logger:debugLambda(function()
-        return "[304] No changes in feature flags, using cached data. etag=" ..
-            tostring(self.etag)
-      end)
+      self.logger:debug("[304] No changes in feature flags, using cached data. etag=%s", tostring(self.etag))
 
       -- REMARKS
-      --   etag가 캐싱된 경우, 서버에서 실제로 가져온건 아니지만
-      --   이미 최신이므로 가져온걸로 처리해줘야함
+      --  etag가 캐싱된 경우, 서버에서 실제로 가져온건 아니지만
+      --  이미 최신이므로 가져온걸로 처리해줘야함
       if not self.fetchedFromServer then
         self.fetchedFromServer = true
         self:_setReady()
       end
 
       self:_storeLastRefreshTimestamp(function()
-        if callback then
-          callback() -- 304도 성공으로 처리
-        end
+        self:_safeCallCallback(callback) -- 304도 성공으로 처리
       end)
 
-      self:_timedFetch(self.refreshInterval)
+      local nextFetchDelay = self:_countSuccess()
+      self:_timedFetch(nextFetchDelay)
     else
       if response.status <= 0 then
         self.logger:warn("Fetching flags did not have an OK response: " .. response.status)
@@ -874,29 +917,31 @@ function Client:_fetchToggles(callback)
         self.logger:warn("Fetching flags did not have an OK response: " .. response.status .. "\n\n" .. response.body)
       end
 
-      self.sdkState = "error"
-      local errorObj = { type = "HttpError", code = response.status }
-      self:_emit(Events.ERROR, errorObj)
-      self.lastError = errorObj
+      local error = { type = "HttpError", code = response.status }
 
+      self.sdkState = "error"
+      self:_emit(Events.ERROR, error)
+      self.lastError = error
+
+      -- 401, 403 오류인 경우에는 더이상 fetch를 하지 않는다.
       local nextFetchDelay = self:_handleErrorCases(url, response.status)
       self:_timedFetch(nextFetchDelay)
 
-      if callback then
-        callback(errorObj) -- 오류 객체 전달
-      end
+      self:_safeCallCallback(callback, error)
     end
   end)
 end
 
 function Client:_emit(event, ...)
   if self.eventEmitter:hasListeners(event) then
-    local argCount = select("#", ...)
-    if argCount > 0 then
-      local args = ...
-      self.logger:debugLambda(function() return "`" .. event .. "` event is emitted: " .. Json.encode(args) end)
-    else
-      self.logger:debugLambda(function() return "`" .. event .. "` event is emitted." end)
+    if self.logger:isEnabled(Logger.LogLevel.Debug) then
+      local argCount = select("#", ...)
+      if argCount > 0 then
+        local args = ...
+        self.logger:debug("`" .. event .. "` event is emitted: %s", Json.encode(args))
+      else
+        self.logger:debug("`" .. event .. "` event is emitted.")
+      end
     end
 
     self.eventEmitter:emit(event, ...)
@@ -915,67 +960,104 @@ function Client:off(event, callback)
   self.eventEmitter:off(event, callback)
 end
 
-function Client:applyChanges()
-  -- 실시간으로 변경된 내용을 외부에서 액세스하는 값에 반영이 되도록 함.
-
-  -- TODO
-  -- self.appliedToggles = Util.deepClone(self.toggles)
-end
-
-function Client:watch(key, callback, ownerWeakref)
-  if not key or type(key) ~= "string" or string.len(key) == 0 then
-    self.logger:warn("`key` is required")
-    return
-  end
-
-  if not callback or type(callback) ~= "function" then
-    self.logger:warn("`callback` is required")
-    return
-  end
-
-  return self.eventSystem:watch(key, callback, ownerWeakref)
-end
-
-function Client:initAndWatch(key, callback, ownerWeakref)
-  -- 플래그가 초기화된 상태에서 일괄로 처리해주는게 좋을까?
-
-  -- if not self:isReady() then
-  --   self.logger:warn("Client is not ready yet. Please call `ready()` before using this method.")
-  --   -- 준비되었을때 callback을 호출해주기 위해서 대기시킴
-  --   return
-  -- end
-
-  local disabledToggle = _makeDisabledToggle(key)
-
-  if not key or type(key) ~= "string" or string.len(key) == 0 then
-    self.logger:warn("`key` is required")
-    return disabledToggle
-  end
-
-  if not callback or type(callback) ~= "function" then
-    self.logger:warn("`callback` is required")
-    return disabledToggle
-  end
-
-  local toggle = _findToggleInArray(self.toggles, key)
-  if toggle then
-    callback(toggle)
+function Client:_selectToggleMap()
+  if self.useExplicitSyncMode then
+    return self.synchronizedToggleMap
   else
-    toggle = disabledToggle
-    callback(toggle)
+    return self.toggleMap
   end
-
-  self.logger:info("initAndWatch: feature=`" .. toggle.name .. "`, initialState=" .. tostring(toggle.enabled))
-
-  return self:watch(key, callback, ownerWeakref)
 end
 
-function Client:unwatch(key, callback)
+function Client:syncToggles(callback)
+  if not self.synchronizedToggleMap then
+    self:_safeCallCallback(callback)
+    return
+  end
+
+  -- TODO background에서 이미 업데이트하고 있었는데, 또다시 업데이트를 해야하만 할까?
+
+  self.synchronizedToggleMap = Util.deepClone(self.toggleMap)
+
+  self:_safeCallCallback(callback)
+
+  -- self:updateToggles(function()
+  -- TODO 변경된 내용을 최신 내용에 복제를 해줘야함.
+
+  -- self:_safeCallCallback(callback)
+  -- end)
+end
+
+function Client:watch(featureName, callback, ownerWeakref)
+  if not featureName or type(featureName) ~= "string" or string.len(featureName) == 0 then
+    self.logger:warn("`featureName` is required")
+    return
+  end
+
+  if not callback or type(callback) ~= "function" then
+    self.logger:warn("`callback` is required")
+    return
+  end
+
+  -- Wrap the callback to handle errors
+  local safeCallback = function(...)
+    self:_safeCallCallback(callback, ...)
+  end
+
+  return self.eventSystem:watch(featureName, safeCallback, ownerWeakref)
+end
+
+-- TODO toggle 접근용 인터페이스로 감싸서 전달하는게 좋을듯함!
+function Client:initAndWatch(featureName, callback, ownerWeakref)
+  local disabledToggle = _makeDisabledToggle(featureName)
+
+  if not featureName or type(featureName) ~= "string" or string.len(featureName) == 0 then
+    self.logger:warn("`featureName` is required")
+    return disabledToggle
+  end
+
+  if not callback or type(callback) ~= "function" then
+    self.logger:warn("`callback` is required")
+    return disabledToggle
+  end
+
+  local action = function()
+    local toggle = self.toggleMap[featureName]
+    if toggle then
+      self:_safeCallCallback(callback, toggle)
+    else
+      toggle = disabledToggle
+      self:_safeCallCallback(callback, toggle)
+    end
+
+    self.logger:info("initAndWatch: feature=`%s`, initialState=%s", toggle.name, tostring(toggle.enabled))
+  end
+
+  -- If READY event has already been emitted, execute immediately
+  -- If READY event has not been emitted yet, execute after the READY event occurs
+  if self.readyEventEmitted then
+    action()
+  else
+    self.logger:debug("initAndWatch: waiting for ready event. feature=`%s`", featureName)
+    self:once(Events.READY, action)
+  end
+
+  -- FIXME callback을 wrap하게 되면, 해제가 안된다.
+
+  -- Wrap the callback to handle errors
+  local safeCallback = function(...)
+    self:_safeCallCallback(callback, ...)
+  end
+
+  return self.eventSystem:watch(featureName, safeCallback, ownerWeakref)
+end
+
+-- FIXME callback이 wrap이 되어 있으므로, 해제가 안됨
+function Client:unwatch(featureName, callback)
   if self.offline then
     return
   end
 
-  return self.eventSystem:unwatch(key, callback)
+  return self.eventSystem:unwatch(featureName, callback)
 end
 
 function Client:tick()
@@ -988,9 +1070,9 @@ end
 
 -----------------------------------------------------------------------------------------------
 
-function Client:booVariation(key, defaultValue)
-  if not key or type(key) ~= "string" or key == "" then
-    self.logger:warn("`key` is required")
+function Client:booVariation(featureName, defaultValue)
+  if not featureName or type(featureName) ~= "string" or featureName == "" then
+    self.logger:warn("`featureName` is required")
     return defaultValue
   end
 
@@ -1001,33 +1083,29 @@ function Client:booVariation(key, defaultValue)
   end
 
   local success, result = pcall(function()
-    return self:isEnabled(key)
+    return self:isEnabled(featureName)
   end)
 
   if not success then
-    self.logger:warn(string.format(
-      "Error in booVariation for feature '%s': %s",
-      key,
-      tostring(result)
-    ))
+    self.logger:warn("Error in booVariation for feature '%s': %s", featureName, tostring(result))
 
     self:_emit(Events.ERROR, {
       type = "VariationError",
       message = tostring(result),
-      featureName = key,
+      featureName = featureName,
       variationType = "boolean"
     })
 
     return defaultValue
   end
 
-  --여기서 or을 해주는게 맞는걸까? 이건좀 생각해봐야할듯...
+  -- CHECKME 여기서 or을 해주는게 맞는걸까? 이건좀 생각해봐야할듯...
   return result or defaultValue
 end
 
-function Client:numberVariation(key, defaultValue)
-  if not key or type(key) ~= "string" or key == "" then
-    self.logger:warn("`key` is required")
+function Client:numberVariation(featureName, defaultValue)
+  if not featureName or type(featureName) ~= "string" or featureName == "" then
+    self.logger:warn("`featureName` is required")
     return defaultValue
   end
 
@@ -1038,20 +1116,16 @@ function Client:numberVariation(key, defaultValue)
   end
 
   local success, variant = pcall(function()
-    return self:getVariant(key)
+    return self:getVariant(featureName)
   end)
 
   if not success then
-    self.logger:warn(string.format(
-      "Error in numberVariation for feature '%s': %s",
-      key,
-      tostring(variant)
-    ))
+    self.logger:warn("Error in numberVariation for feature '%s': %s", featureName, tostring(variant))
 
     self:_emit(Events.ERROR, {
       type = "VariationError",
       message = tostring(variant),
-      featureName = key,
+      featureName = featureName,
       variationType = "number"
     })
 
@@ -1066,11 +1140,8 @@ function Client:numberVariation(key, defaultValue)
     if numSuccess and numValue then
       return numValue
     else
-      self.logger:warn(string.format(
-        "Failed to convert value to number for feature '%s': %s",
-        key,
-        tostring(variant.payload.value)
-      ))
+      self.logger:warn("Failed to convert value to number for feature '%s': %s", featureName,
+      tostring(variant.payload.value))
       return defaultValue
     end
   end
@@ -1078,9 +1149,9 @@ function Client:numberVariation(key, defaultValue)
   return defaultValue
 end
 
-function Client:stringVariation(key, defaultValue)
-  if not key or type(key) ~= "string" or key == "" then
-    self.logger:warn("`key` is required")
+function Client:stringVariation(featureName, defaultValue)
+  if not featureName or type(featureName) ~= "string" or featureName == "" then
+    self.logger:warn("`featureName` is required")
     return defaultValue
   end
 
@@ -1091,20 +1162,16 @@ function Client:stringVariation(key, defaultValue)
   end
 
   local success, variant = pcall(function()
-    return self:getVariant(key)
+    return self:getVariant(featureName)
   end)
 
   if not success then
-    self.logger:warn(string.format(
-      "Error in stringVariation for feature '%s': %s",
-      key,
-      tostring(variant)
-    ))
+    self.logger:warn("Error in stringVariation for feature '%s': %s", featureName, tostring(variant))
 
     self:_emit(Events.ERROR, {
       type = "VariationError",
       message = tostring(variant),
-      featureName = key,
+      featureName = featureName,
       variationType = "string"
     })
 
@@ -1116,10 +1183,7 @@ function Client:stringVariation(key, defaultValue)
       local strValue = tostring(variant.payload.value)
       return strValue
     else
-      self.logger:warn(string.format(
-        "Nil string value for feature '%s'",
-        key
-      ))
+      self.logger:warn("Nil string value for feature '%s'", featureName)
       return defaultValue
     end
   end
@@ -1127,9 +1191,9 @@ function Client:stringVariation(key, defaultValue)
   return defaultValue
 end
 
-function Client:jsonVariation(key, defaultValue)
-  if not key or type(key) ~= "string" or key == "" then
-    self.logger:warn("`key` is required")
+function Client:jsonVariation(featureName, defaultValue)
+  if not featureName or type(featureName) ~= "string" or featureName == "" then
+    self.logger:warn("`featureName` is required")
     return defaultValue
   end
 
@@ -1139,23 +1203,19 @@ function Client:jsonVariation(key, defaultValue)
     return defaultValue
   end
 
-  local variant = self:getVariant(key)
+  local variant = self:getVariant(featureName)
   if not variant or not variant.payload then
-    self.logger:debug(string.format("No valid payload found for feature '%s'", key))
+    self.logger:debug("No valid payload found for feature '%s'", featureName)
     return defaultValue
   end
 
   if variant.payload.type ~= "json" then
-    self.logger:debug(string.format(
-      "Expected JSON payload for feature '%s' but got '%s'",
-      key,
-      variant.payload.type or "nil"
-    ))
+    self.logger:debug("Expected JSON payload for feature '%s' but got '%s'", featureName, variant.payload.type or "nil")
     return defaultValue
   end
 
   if not variant.payload.value then
-    self.logger:warn(string.format("Empty JSON payload for feature '%s'", key))
+    self.logger:warn("Empty JSON payload for feature '%s'", featureName)
     return defaultValue
   end
 
@@ -1164,16 +1224,12 @@ function Client:jsonVariation(key, defaultValue)
   end)
 
   if not success then
-    self.logger:warn(string.format(
-      "Failed to decode JSON for feature '%s': %s",
-      key,
-      tostring(result)
-    ))
+    self.logger:warn("Failed to decode JSON for feature '%s': %s", featureName, tostring(result))
 
     self:_emit(Events.ERROR, {
       type = "JsonDecodeError",
       message = tostring(result),
-      featureName = key,
+      featureName = featureName,
       payload = variant.payload.value
     })
 
@@ -1181,7 +1237,7 @@ function Client:jsonVariation(key, defaultValue)
   end
 
   if not result then
-    self.logger:warn(string.format("JSON decode returned nil for feature '%s'", key))
+    self.logger:warn("JSON decode returned nil for feature '%s'", featureName)
     return defaultValue
   end
 
