@@ -31,23 +31,24 @@ local function removeEntry(t, pred)
   return t
 end
 
-function EventEmitter.New(loggerFactory)
+function EventEmitter.New(config)
   local self = setmetatable({}, EventEmitter)
-  self.logger = loggerFactory:CreateLogger("UnleashEventEmitter")
-  self._on = {}
+  self.logger = config.loggerFactory:CreateLogger("UnleashEventEmitter")
+  self.onError = config.onError
+  self.on = {}
   return self
 end
 
 function EventEmitter:getSafeEventTable(event)
-  if type(self._on[event]) ~= "table" then
-    self._on[event] = {}
+  if type(self.on[event]) ~= "table" then
+    self.on[event] = {}
   end
 
-  return self._on[event]
+  return self.on[event]
 end
 
 function EventEmitter:getEventTable(event)
-  return self._on[event]
+  return self.on[event]
 end
 
 function EventEmitter:AddListener(event, listener)
@@ -62,15 +63,13 @@ function EventEmitter:AddListener(event, listener)
       string.sub(eventPrefix, PREFIX_LENGTH + 1) .. " event listeners: " .. tostring(listenerCount))
   end
 
-  return self
-end
-
-function EventEmitter:On(event, listener)
-  self:AddListener(event, listener)
-
   return function()
     self:RemoveListener(event, listener)
   end
+end
+
+function EventEmitter:On(event, listener)
+  return self:AddListener(event, listener)
 end
 
 function EventEmitter:Once(event, listener)
@@ -84,15 +83,18 @@ function EventEmitter:Once(event, listener)
   end
 
   table.insert(eventTable, listener)
-  return self
+
+  return function()
+    self:RemoveListener(event, listener)
+  end
 end
 
 function EventEmitter:Off(event, listener)
-  if listener == nil then
-    return self:RemoveAllListeners(event)
-  else
-    self:RemoveListener(event, listener)
-  end
+  self:RemoveListener(event, listener)
+end
+
+function EventEmitter:OffAll(event)
+  return self:RemoveAllListeners(event)
 end
 
 function EventEmitter:Emit(event, ...)
@@ -103,6 +105,11 @@ function EventEmitter:Emit(event, ...)
       local status, error = pcall(listener, ...)
       if not status then
         self.logger:Error(string.sub(eventPrefix, PREFIX_LENGTH + 1) .. " emit error: " .. tostring(error))
+
+        self.onError({
+          type = "EventEmitterCallbackError",
+          message = tostring(error)
+        })
       end
     end
   end
@@ -116,12 +123,17 @@ function EventEmitter:Emit(event, ...)
       local status, error = pcall(listener, ...)
       if not status then
         self.logger:Error(string.sub(eventPrefix, PREFIX_LENGTH + 1) .. " emit error: " .. tostring(error))
+
+        self.onError({
+          type = "EventEmitterCallbackError",
+          message = tostring(error)
+        })
       end
     end
 
-    -- once 인 경우에는 이벤트를 한번만 수신하고 listener자체를 제거한다.
+    -- For 'once' events, we only receive the event once and then remove the listener
     removeEntry(eventTable, function(v) return v ~= nil end)
-    self._on[eventPrefix] = nil
+    self.on[eventPrefix] = nil
   end
 
   return self
@@ -200,16 +212,16 @@ function EventEmitter:RemoveAllListeners(event)
     eventPrefix = eventPrefix .. ":once"
     eventTable = self:getSafeEventTable(eventPrefix)
     removeEntry(eventTable, function(v) return v ~= nil end)
-    self._on[eventPrefix] = nil
+    self.on[eventPrefix] = nil
   else
-    for eventPrefix, _ in pairs(self._on) do
+    for eventPrefix, _ in pairs(self.on) do
       self:RemoveAllListeners(string.sub(eventPrefix, PREFIX_LENGTH + 1))
     end
   end
 
-  for eventPrefix, listeners in pairs(self._on) do
+  for eventPrefix, listeners in pairs(self.on) do
     if #listeners == 0 then
-      self._on[eventPrefix] = nil
+      self.on[eventPrefix] = nil
     end
   end
 
@@ -227,7 +239,7 @@ function EventEmitter:RemoveListener(event, listener)
   -- normal listener
   removeEntry(eventTable, listener)
   if #eventTable == 0 then
-    self._on[eventPrefix] = nil
+    self.on[eventPrefix] = nil
   end
 
   -- emit-once listener
@@ -235,7 +247,7 @@ function EventEmitter:RemoveListener(event, listener)
   eventTable = self:getSafeEventTable(eventPrefix)
   removeEntry(eventTable, listener)
   if #eventTable == 0 then
-    self._on[eventPrefix] = nil
+    self.on[eventPrefix] = nil
   end
 
   return self

@@ -10,6 +10,7 @@ MetricsReporter.__index = MetricsReporter
 function MetricsReporter.New(config)
   if not config.onError then error("`onError` is required") end
   if not config.appName then error("`appName` is required") end
+  if not config.connectionId then error("`connectionId` is required") end
   if not config.url then error("`url` is required") end
   if not config.clientKey then error("`clientKey` is required") end
   if not config.request then error("`request` is required") end
@@ -28,6 +29,7 @@ function MetricsReporter.New(config)
   self.clientKey = config.clientKey
   self.headerName = config.headerName or "Authorization"
   self.customHeaders = config.customHeaders or {}
+  self.connectionId = config.connectionId
   self.bucket = self:createEmptyBucket()
   self.timer = config.timer
   self.timerRunning = false
@@ -88,9 +90,13 @@ end
 
 function MetricsReporter:getHeaders()
   local headers = {
-    [self.headerName] = self.clientKey,
-    Accept = "application/json",
+    ["Accept"] = "application/json",
     ["Content-Type"] = "application/json",
+    ["Cache"] = "no-cache",
+    [self.headerName] = self.clientKey,
+    ["unleash-appname"] = self.appName,
+    ["unleash-connection-id"] = connectionId, -- TODO
+    ["unleash-sdk"] = sdkName, -- TODO
   }
 
   -- TODO customHeadersFunction
