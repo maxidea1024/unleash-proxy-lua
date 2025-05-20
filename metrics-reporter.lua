@@ -95,8 +95,8 @@ function MetricsReporter:getHeaders()
     ["Cache"] = "no-cache",
     [self.headerName] = self.clientKey,
     ["unleash-appname"] = self.appName,
-    ["unleash-connection-id"] = connectionId, -- TODO
-    ["unleash-sdk"] = sdkName, -- TODO
+    ["unleash-connection-id"] = self.connectionId,
+    ["unleash-sdk"] = self.sdkName,
   }
 
   -- TODO customHeadersFunction

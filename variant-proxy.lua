@@ -20,7 +20,7 @@ function VariantProxy:GetVariantName()
   return self.variant.name
 end
 
-function VariantProxy:GetVariant()
+function VariantProxy:GetRawVariant()
   return self.variant
 end
 

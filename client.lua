@@ -249,11 +249,11 @@ function Client:IsEnabled(featureName)
 end
 
 function Client:GetVariant(featureName)
-  local rawVariant = self:getVariantRaw(featureName)
+  local rawVariant = self:getRawVariant(featureName)
   return VariantProxy.New(self, featureName, rawVariant)
 end
 
-function Client:getVariantRaw(featureName)
+function Client:getRawVariant(featureName)
   if not featureName or type(featureName) ~= "string" or string.len(featureName) == 0 then
     self.logger:Warn("`featureName` is required")
     return DEFAULT_DISABLED_VARIANT
@@ -911,7 +911,7 @@ function Client:fetchToggles(callback)
 
         self:callCallbackWithGuard(callback, error)
 
-        return -- stop fetching anymore
+        return -- stop fetching no more
       end
 
       self:storeToggles(data.toggles, function()
