@@ -2,6 +2,8 @@
 
 Lua 애플리케이션을 위한 피처 플래그 클라이언트로, Unleash 서버에 연결하여 동작합니다. 이 클라이언트를 사용하면 최소한의 노력으로 Lua 애플리케이션에서 피쳐 플래그를 관리할 수 있습니다.
 
+![Feature Flags Demo](doc/2025-05-21%2019%2023%2048.mp4)
+
 
 ## 피처 플래그란?
 
@@ -79,18 +81,18 @@ local client = Client.New({
 
 - **짧은 폴링 주기 (10초 미만)**
   - **장점**: 피처 플래그 변경 사항이 빠르게 적용됨
-  - **단점**: 
+  - **단점**:
     - 서버 부하 증가
     - 네트워크 트래픽 증가
     - 배터리 소모 증가 (모바일 환경)
     - 서버 측 속도 제한(rate limiting)에 도달할 가능성
 
 - **긴 폴링 주기 (60초 이상)**
-  - **장점**: 
+  - **장점**:
     - 서버 부하 감소
     - 네트워크 트래픽 감소
     - 배터리 소모 감소
-  - **단점**: 
+  - **단점**:
     - 피처 플래그 변경 사항이 적용되기까지 시간 지연
     - 중요한 기능 변경이 지연될 수 있음
 
@@ -147,7 +149,7 @@ client:WaitUntilReady(function()
   else
     print("기능이 비활성화되었습니다!")
   end
-  
+
   -- 변형 정보 가져오기
   local variant = client:GetVariant("my-feature-with-variants")
   print("변형 이름:", variant:GetVariantName())
@@ -166,7 +168,7 @@ local client = Client.New({
   clientKey = "your-client-key",            -- 클라이언트 API 키
   appName = "your-app-name",                -- 애플리케이션 이름
   request = yourHttpRequestFunction,        -- HTTP 요청 함수
-  
+
   -- 선택적 매개변수
   environment = "production",               -- 환경 이름 (기본값: "default")
   refreshInterval = 30,                     -- 폴링 간격(초) (기본값: 30)
@@ -250,7 +252,7 @@ local client = Client.New({
   clientKey = "your-client-key",
   appName = "your-app-name",
   request = yourHttpRequestFunction,
-  
+
   -- 부트스트랩 구성
   bootstrap = initialFeatureFlags,
   bootstrapOverride = true  -- true: 항상 부트스트랩 값으로 덮어씀
@@ -432,7 +434,7 @@ local client = Client.New({
    -- 실시간 업데이트 시나리오
    function bossFight()
      startBossFight()
-     
+
      -- 전투 중 서버에서 "boss-difficulty" 플래그가 변경되면
      -- 즉시 적용되어 갑작스러운 난이도 변화 발생
      -- 플레이어는 혼란스럽고 불공정하다고 느낄 수 있음
@@ -445,7 +447,7 @@ local client = Client.New({
    -- 실시간 업데이트 시나리오
    function navigateMenu()
      showMainMenu()
-     
+
      -- 사용자가 메뉴 탐색 중 "new-ui-layout" 플래그가 변경되면
      -- 즉시 UI가 재구성되어 사용자 경험 저하
      -- 사용자가 클릭하려던 버튼 위치가 바뀌어 의도치 않은 동작 발생
@@ -459,7 +461,7 @@ local client = Client.New({
    function purchaseItem(itemId)
      local price = getItemPrice(itemId)
      showConfirmDialog("구매 확인", itemId, price)
-     
+
      -- 사용자가 확인 대화상자를 보는 동안 "pricing-policy" 플래그가 변경되면
      -- 확인 버튼 클릭 시 다른 가격으로 처리될 수 있음
      -- 사용자는 표시된 가격과 다른 금액이 청구되는 혼란 경험
@@ -472,7 +474,7 @@ local client = Client.New({
    -- 실시간 업데이트 시나리오
    function pvpMatch()
      startMatch()
-     
+
      -- 매치 중 "character-balance" 플래그가 변경되면
      -- 캐릭터 능력치가 즉시 변경되어 경기 밸런스 붕괴
      -- 플레이어는 갑자기 약해지거나 강해져 불공정함 경험
@@ -500,10 +502,10 @@ function startGameSession()
   -- 최신 플래그로 동기화
   client:SyncToggles(true, function()
     print("게임 세션 시작 전 최신 기능 플래그 적용")
-    
+
     -- 게임 세션 시작
     beginGameSession()
-    
+
     -- 게임 세션 중에는 플래그 변경 없이 일관된 경험 제공
   end)
 end
@@ -512,7 +514,7 @@ end
 function endGameSession()
   -- 게임 결과 저장 등 마무리 작업
   finalizeGameSession()
-  
+
   -- 세션 종료 후 최신 플래그 동기화
   client:SyncToggles(true, function()
     print("게임 세션 종료 후 최신 기능 플래그 적용")
@@ -528,14 +530,14 @@ end
 function changeLevel(newLevelId)
   -- 로딩 화면 표시
   showLoadingScreen()
-  
+
   -- 레벨 전환 전 최신 플래그 동기화
   client:SyncToggles(true, function()
     print("레벨 전환 시 최신 기능 플래그 적용")
-    
+
     -- 새 레벨에 적용될 기능 확인
     local hasNewFeatures = client:IsEnabled("level-" .. newLevelId .. "-features")
-    
+
     -- 레벨 로드 및 초기화
     loadLevel(newLevelId, hasNewFeatures)
     hideLoadingScreen()
@@ -553,7 +555,7 @@ function startMatchmaking()
     -- 매치메이킹 관련 기능 확인
     local matchmakingVariant = client:GetVariant("matchmaking-algorithm")
     local algorithm = matchmakingVariant:StringVariation("default")
-    
+
     -- 선택된 알고리즘으로 매치메이킹 시작
     beginMatchmaking(algorithm)
   end)
@@ -565,7 +567,7 @@ function createGameInstance(players)
     -- 게임 모드 확인
     local gameModeVariant = client:GetVariant("game-mode-settings")
     local settings = gameModeVariant:JsonVariation({})
-    
+
     -- 설정된 게임 모드로 인스턴스 생성
     initializeGameInstance(players, settings)
   end)
@@ -580,7 +582,7 @@ function performDailyReset()
   -- 일일 리셋 작업 수행
   resetDailyQuests()
   resetDailyShop()
-  
+
   -- 리셋 후 최신 플래그 동기화
   client:SyncToggles(true, function()
     -- 오늘의 이벤트 확인
@@ -589,7 +591,7 @@ function performDailyReset()
       local eventType = eventVariant:StringVariation("none")
       activateSpecialEvent(eventType)
     end
-    
+
     -- UI 업데이트
     refreshGameUI()
   end)
@@ -631,7 +633,7 @@ local client = Client.New({
   clientKey = "your-client-key",
   appName = "your-app-name",
   request = yourHttpRequestFunction,
-  
+
   -- 명시적 동기화 모드 활성화
   useExplicitSyncMode = true
 })
@@ -654,7 +656,7 @@ client:WaitUntilReady(function()
   if client:IsEnabled("feature-a") then
     print("초기 상태에서 기능 A 활성화됨")
   end
-  
+
   -- 서버에서 최신 토글 가져오기
   client:UpdateToggles(function(error)
     if not error then
@@ -678,7 +680,7 @@ function switchToScreen(screenName)
   -- 화면 전환 전에 최신 토글 동기화
   client:SyncToggles(true, function()
     print("화면 전환 전 최신 토글로 동기화됨")
-    
+
     -- 이제 최신 상태로 화면 렌더링
     renderScreen(screenName)
   end)
@@ -714,7 +716,7 @@ function userLogin(userId)
     -- 사용자별 토글 가져오기 및 동기화
     client:SyncToggles(true, function()
       print("사용자 로그인 시 토글 동기화됨")
-      
+
       -- 이제 사용자별 기능 확인 가능
       if client:IsEnabled("premium-feature") then
         showPremiumFeatures()
@@ -729,7 +731,7 @@ end
 ```lua
 function startCriticalOperation()
   print("중요 작업 시작, 토글 업데이트 무시")
-  
+
   -- 작업 완료
   performCriticalTask(function()
     -- 작업 완료 후 최신 상태로 동기화
@@ -836,7 +838,7 @@ local jsonValue = client:JsonVariation("my-json-feature", {})
 local unsubscribe = client:WatchToggle("new-feature", function(variant)
   print("Feature changed:", variant:IsEnabled())
   print("Variant name:", variant:GetVariantName())
-  
+
   if variant:IsEnabled() then
     enableNewFeature()
   else
@@ -851,7 +853,7 @@ unsubscribe()
 client:WatchToggleWithInitialState("new-feature", function(variant)
   print("Feature state:", variant:IsEnabled())
   print("Variant name:", variant:GetVariantName())
-  
+
   if variant:IsEnabled() then
     enableNewFeature()
   else
@@ -901,7 +903,7 @@ function setupDynamicFeatures()
       endSpecialEvent()
     end
   end)
-  
+
   -- 초기 상태와 변경 사항 모두 처리
   client:WatchToggleWithInitialState("game-difficulty", function(variant)
     local difficultyConfig = variant:JsonVariation({
@@ -909,7 +911,7 @@ function setupDynamicFeatures()
       normal = { enemyDamage = 1.0, playerHealth = 1.0 },
       hard = { enemyDamage = 1.2, playerHealth = 0.8 }
     })
-    
+
     applyDifficultySettings(difficultyConfig)
   end)
 end
@@ -922,10 +924,10 @@ end
 client:WatchToggleWithInitialState("item-drop-rates", function(variant)
   -- 문자열 변형 사용
   local dropRateMode = variant:StringVariation("normal")
-  
+
   -- 숫자 변형 사용
   local legendaryDropMultiplier = variant:NumberVariation(1.0)
-  
+
   -- JSON 변형 사용
   local dropRateConfig = variant:JsonVariation({
     common = 70,
@@ -934,7 +936,7 @@ client:WatchToggleWithInitialState("item-drop-rates", function(variant)
     epic = 1.8,
     legendary = 0.2
   })
-  
+
   -- 변형 데이터 적용
   updateDropRates(dropRateMode, legendaryDropMultiplier, dropRateConfig)
 end)
@@ -978,7 +980,7 @@ local client = Client.New({
   clientKey = "your-client-key",
   appName = "your-app-name",  -- 정적 필드
   environment = "production",  -- 정적 필드
-  
+
   -- 초기 컨텍스트 설정
   context = {
     userId = "user-123",       -- 가변 필드
@@ -1337,22 +1339,22 @@ function onUserLogin(userId, userInfo)
     }
   }, function()
     -- 컨텍스트 업데이트 후 사용자별 기능 확인
-    
+
     -- 프리미엄 기능
     if client:IsEnabled("premium-features") then
       enablePremiumFeatures()
     end
-    
+
     -- 지역별 기능
     if client:IsEnabled("regional-content") then
       loadRegionalContent()
     end
-    
+
     -- 신규 사용자 튜토리얼
     if client:IsEnabled("new-user-tutorial") then
       showTutorial()
     end
-    
+
     -- A/B 테스트
     local uiVariant = client:GetVariant("ui-redesign")
     if uiVariant:IsEnabled() then
@@ -1368,7 +1370,7 @@ end
 -- 앱 시작 시 디바이스 정보 설정
 function initializeDeviceContext()
   local deviceInfo = getDeviceInfo()
-  
+
   client:UpdateContext({
     properties = {
       deviceType = deviceInfo.type,  -- "mobile", "tablet", "desktop"
@@ -1379,17 +1381,17 @@ function initializeDeviceContext()
     }
   }, function()
     -- 디바이스 특성에 따른 기능 최적화
-    
+
     -- 저사양 디바이스 최적화
     if client:IsEnabled("low-end-device-optimization") then
       enableLowEndOptimizations()
     end
-    
+
     -- 고해상도 텍스처
     if client:IsEnabled("high-res-textures") then
       loadHighResTextures()
     end
-    
+
     -- 네트워크 최적화
     local networkConfig = client:GetVariant("network-config")
     if networkConfig:IsEnabled() then
@@ -1459,7 +1461,7 @@ function initializeInventory()
   else
     initializeLegacyInventorySystem()
   end
-  
+
   -- 변형을 통한 아이템 드롭률 조정
   local dropRateConfig = client:GetVariant("item-drop-rates")
   if dropRateConfig:IsEnabled() then
@@ -1483,15 +1485,15 @@ end
 ```lua
 function showTutorial()
   local tutorialVariant = client:GetVariant("tutorial-version")
-  
+
   if not tutorialVariant:IsEnabled() then
     -- 기본 튜토리얼 표시
     showDefaultTutorial()
     return
   end
-  
+
   local version = tutorialVariant:StringVariation("default")
-  
+
   if version == "interactive" then
     showInteractiveTutorial()
   elseif version == "video" then
@@ -1501,7 +1503,7 @@ function showTutorial()
   else
     showDefaultTutorial()
   end
-  
+
   -- 분석 이벤트 전송
   trackAnalyticsEvent("tutorial_shown", {
     variant = version
@@ -1514,13 +1516,13 @@ end
 ```lua
 function initializeShop()
   local shopVariant = client:GetVariant("shop-layout")
-  
+
   if shopVariant:IsEnabled() then
     local layout = shopVariant:StringVariation("grid")
     local featuredItems = shopVariant:JsonVariation({})
-    
+
     initializeShopWithLayout(layout, featuredItems)
-    
+
     -- 구매 전환율 추적
     trackShopConversion(layout)
   else
@@ -1542,7 +1544,7 @@ function checkSeasonalEvents()
     enableChristmasDecorations()
     addChristmasItems()
     startSnowEffect()
-    
+
     -- 이벤트 세부 설정
     local eventConfig = client:GetVariant("christmas-event-config")
     if eventConfig:IsEnabled() then
@@ -1551,7 +1553,7 @@ function checkSeasonalEvents()
       setSpecialDrops(config.specialDrops)
     end
   end
-  
+
   -- 할로윈 이벤트
   if client:IsEnabled("halloween-event") then
     enableHalloweenTheme()
@@ -1561,7 +1563,7 @@ function checkSeasonalEvents()
 -- 게임 시작 시 및 주기적으로 확인
 function onGameStart()
   checkSeasonalEvents()
-  
+
   -- 4시간마다 이벤트 상태 확인
   scheduleRepeating(checkSeasonalEvents, 4 * 60 * 60)
 }
@@ -1578,7 +1580,7 @@ function checkWeekendBonus()
         xpMultiplier: 2.0,
         goldMultiplier: 1.5
       })
-      
+
       applyXPBoost(config.xpMultiplier)
       applyGoldBoost(config.goldMultiplier)
       showBoostNotification()
@@ -1605,14 +1607,14 @@ function initializeRegionalContent()
     if client:IsEnabled("show-gacha-probabilities") then
       enableGachaProbabilityDisplay()
     }
-    
+
     -- 혈흔 효과
     if client:IsEnabled("blood-effects") then
       enableBloodEffects()
     } else {
       enableAlternativeEffects()
     }
-    
+
     -- 지역별 인게임 상점 가격
     local pricingConfig = client:GetVariant("regional-pricing")
     if pricingConfig:IsEnabled() then
@@ -1638,7 +1640,7 @@ function applyAgeRestrictions()
       disableMicrotransactions()
       enableContentFilter()
     }
-    
+
     -- 채팅 필터
     if client:IsEnabled("chat-filter") then
       local filterConfig = client:GetVariant("chat-filter-config")
@@ -1660,17 +1662,17 @@ function initializeGameServices()
   if client:IsEnabled("leaderboards") then
     initializeLeaderboards()
   }
-  
+
   if client:IsEnabled("friend-activity") then
     initializeFriendActivity()
   }
-  
+
   if client:IsEnabled("detailed-match-history") then
     initializeMatchHistory()
   } else {
     initializeBasicMatchHistory()
   }
-  
+
   -- 매치메이킹 풀 크기 조정
   local matchmakingConfig = client:GetVariant("matchmaking-config")
   if matchmakingConfig:IsEnabled() then
@@ -1694,11 +1696,11 @@ function onServerStatusUpdate(serverStatus)
     if not client:IsEnabled("high-quality-textures") then
       useReducedTextures()
     }
-    
+
     if not client:IsEnabled("particle-effects") then
       reduceParticleEffects()
     }
-    
+
     if not client:IsEnabled("background-matchmaking") then
       pauseBackgroundMatchmaking()
     }
@@ -1723,13 +1725,13 @@ function initializeGameBalance()
       sniper: { damage: 120, fireRate: 1.2, recoil: 0.5 }
     }))
   }
-  
+
   -- 캐릭터 능력치
   local characterBalance = client:GetVariant("character-balance")
   if characterBalance:IsEnabled() then
     applyCharacterStats(characterBalance:JsonVariation({}))
   }
-  
+
   -- 경험치 획득률
   local progressionConfig = client:GetVariant("progression-speed")
   if progressionConfig:IsEnabled() then
@@ -1743,7 +1745,7 @@ function initializeGameBalance()
 ```lua
 function configureMatchmaking()
   local matchmakingVariant = client:GetVariant("matchmaking-algorithm")
-  
+
   if matchmakingVariant:IsEnabled() then
     local algorithm = matchmakingVariant:StringVariation("skill-based")
     local config = matchmakingVariant:JsonVariation({
@@ -1752,7 +1754,7 @@ function configureMatchmaking()
       waitTimeWeight: 0.1,
       maxWaitTime: 60
     })
-    
+
     setMatchmakingAlgorithm(algorithm, config)
   }
 }
@@ -1768,7 +1770,7 @@ function configureMatchmaking()
 function optimizeGraphicsSettings()
   -- 디바이스 정보 컨텍스트 설정
   local deviceInfo = getDeviceInfo()
-  
+
   client:UpdateContext({
     properties = {
       deviceModel = deviceInfo.model,
@@ -1784,7 +1786,7 @@ function optimizeGraphicsSettings()
     } else {
       enableBasicGraphics()
     }
-    
+
     -- 그래픽 세부 설정
     local graphicsConfig = client:GetVariant("graphics-config")
     if graphicsConfig:IsEnabled() then
@@ -1794,7 +1796,7 @@ function optimizeGraphicsSettings()
       setTextureQuality(config.textureQuality)
       setAntiAliasing(config.antiAliasing)
     }
-    
+
     -- 프레임 레이트 제한
     if client:IsEnabled("fps-limit") then
       setFrameRateLimit(client:NumberVariation("fps-limit-value", 60))
@@ -1809,7 +1811,7 @@ function optimizeGraphicsSettings()
 function optimizeNetworkSettings()
   -- 네트워크 상태 확인
   local networkInfo = getNetworkInfo()
-  
+
   client:UpdateContext({
     properties = {
       connectionType = networkInfo.connectionType, -- wifi, cellular, ethernet
@@ -1821,7 +1823,7 @@ function optimizeNetworkSettings()
     if client:IsEnabled("data-saving-mode") then
       enableLowDataMode()
     }
-    
+
     -- 네트워크 설정
     local networkConfig = client:GetVariant("network-config")
     if networkConfig:IsEnabled() then
@@ -1852,10 +1854,10 @@ function startGameSession()
   -- 최신 플래그로 동기화
   client:SyncToggles(true, function()
     print("게임 세션 시작 전 최신 기능 플래그 적용")
-    
+
     -- 게임 세션 시작
     beginGameSession()
-    
+
     -- 게임 세션 중에는 플래그 변경 없이 일관된 경험 제공
   end)
 }
@@ -1864,7 +1866,7 @@ function startGameSession()
 function endGameSession()
   -- 게임 결과 저장 등 마무리 작업
   finalizeGameSession()
-  
+
   -- 세션 종료 후 최신 플래그 동기화
   client:SyncToggles(true, function()
     print("게임 세션 종료 후 최신 기능 플래그 적용")
@@ -1880,14 +1882,14 @@ function endGameSession()
 function changeLevel(newLevelId)
   -- 로딩 화면 표시
   showLoadingScreen()
-  
+
   -- 레벨 전환 전 최신 플래그 동기화
   client:SyncToggles(true, function()
     print("레벨 전환 시 최신 기능 플래그 적용")
-    
+
     -- 새 레벨에 적용될 기능 확인
     local hasNewFeatures = client:IsEnabled("level-" .. newLevelId .. "-features")
-    
+
     -- 레벨 로드 및 초기화
     loadLevel(newLevelId, hasNewFeatures)
     hideLoadingScreen()
@@ -1937,21 +1939,21 @@ local offlineFeatureFlags = {
 -- 네트워크 연결 상태에 따라 클라이언트 초기화
 function initializeFeatureFlags()
   local isOnline = checkNetworkConnection()
-  
+
   local client = Client.New({
     url = "https://unleash.example.com/api",
     clientKey = "your-client-key",
     appName = "your-game-name",
     request = yourHttpRequestFunction,
-    
+
     -- 오프라인 모드 설정
     offline = not isOnline,
     bootstrap = offlineFeatureFlags,
-    
+
     -- 네트워크 연결이 있을 때만 자동 시작
     disableAutoStart = not isOnline
   })
-  
+
   -- 네트워크 연결이 있으면 시작
   if isOnline then
     client:Start(function()
@@ -1960,7 +1962,7 @@ function initializeFeatureFlags()
   } else {
     print("오프라인 모드로 피처 플래그 초기화 완료")
   }
-  
+
   return client
 }
 ```
@@ -1980,16 +1982,16 @@ function quickStartGame()
       enabled = true
     }
   }
-  
+
   local client = Client.New({
     -- 기본 구성...
     bootstrap = defaultFeatureFlags,
     bootstrapOverride = false  -- 서버에서 가져온 값으로 나중에 덮어씀
   })
-  
+
   -- 부트스트랩 값으로 즉시 게임 시작
   startGameWithBasicSettings()
-  
+
   -- 백그라운드에서 최신 설정 로드
   client:WaitUntilReady(function()
     -- 필요한 경우 설정 업데이트
@@ -2014,7 +2016,7 @@ function checkPromotions()
         duration: 4, -- hours
         featuredItems: ["item1", "item2", "item3"]
       })
-      
+
       applyFlashSale(config)
     }
   }
@@ -2071,7 +2073,7 @@ function initializeCombatSystem()
   local useNewCombat = client:IsEnabled("new-combat-system")
   local useAdvancedTargeting = useNewCombat and client:IsEnabled("advanced-targeting")
   local useAutoAim = useAdvancedTargeting and client:IsEnabled("auto-aim")
-  
+
   if useNewCombat then
     if useAdvancedTargeting then
       initializeAdvancedTargeting(useAutoAim)
@@ -2098,7 +2100,7 @@ local combatSystems = {
 
 function initializeCombatSystem()
   local systemKey = "legacy"
-  
+
   if client:IsEnabled("new-combat-system") then
     if client:IsEnabled("advanced-targeting") then
       systemKey = client:IsEnabled("auto-aim") and "new-with-auto-aim" or "new-advanced"
@@ -2108,7 +2110,7 @@ function initializeCombatSystem()
   elseif client:IsEnabled("legacy-combat-improvements") then
     systemKey = "legacy-improved"
   end
-  
+
   combatSystems[systemKey]()
 end
 ```
@@ -2206,7 +2208,7 @@ function testAllCriticalPaths()
     { ["game-systems-v2"] = true, ["ui-v2"] = false, ["networking-v2"] = false },
     { ["game-systems-v2"] = false, ["ui-v2"] = false, ["networking-v2"] = false }
   }
-  
+
   for _, combination in ipairs(criticalCombinations) do
     testWithFlagCombination(combination)
   end
@@ -2227,13 +2229,13 @@ function update(dt)
   else
     renderStandardQuality()
   end
-  
+
   if client:IsEnabled("advanced-physics") then
     updateAdvancedPhysics(dt)
   else
     updateBasicPhysics(dt)
   end
-  
+
   -- 매 프레임마다 반복되는 많은 플래그 확인...
 end
 ```
@@ -2250,7 +2252,7 @@ local useAdvancedPhysics = false
 function initializeSettings()
   useHighQualityRendering = client:IsEnabled("high-quality-rendering")
   useAdvancedPhysics = client:IsEnabled("advanced-physics")
-  
+
   -- 플래그 변경 이벤트 구독
   client:On(FeatureFlags.Events.UPDATE, function()
     useHighQualityRendering = client:IsEnabled("high-quality-rendering")
@@ -2264,7 +2266,7 @@ function update(dt)
   else
     renderStandardQuality()
   end
-  
+
   if useAdvancedPhysics then
     updateAdvancedPhysics(dt)
   else
@@ -2284,7 +2286,7 @@ function initializeGame()
   else
     initializeStandardRenderer()
   end
-  
+
   if client:IsEnabled("advanced-physics") then
     initializeAdvancedPhysicsEngine()
   else
@@ -2306,7 +2308,7 @@ function onFeatureFlagsUpdated()
   if client:IsEnabled("new-ui-layout") then
     switchToNewUILayout()  -- 사용자가 메뉴 탐색 중일 때 혼란 야기
   }
-  
+
   -- 게임 규칙 변경
   if client:IsEnabled("updated-game-rules") then
     applyNewGameRules()  -- 게임 중 규칙 변경으로 혼란 야기
@@ -2378,7 +2380,7 @@ function update(dt)
   client:SetContextField("playerX", playerPosition.x)
   client:SetContextField("playerY", playerPosition.y)
   client:SetContextField("playerZ", playerPosition.z)
-  
+
   -- 매 프레임마다 시간 업데이트
   client:SetContextField("currentTime", os.time())
 }
@@ -2395,7 +2397,7 @@ local lastTimeUpdate = 0
 
 function update(dt)
   local currentTime = os.time()
-  
+
   -- 5초마다 위치 업데이트
   if currentTime - lastPositionUpdate > 5 then
     local playerPosition = getPlayerPosition()
@@ -2410,7 +2412,7 @@ function update(dt)
     })
     lastPositionUpdate = currentTime
   end
-  
+
   -- 1분마다 시간 업데이트
   if currentTime - lastTimeUpdate > 60 then
     client:SetContextField("currentTime", currentTime)
@@ -2427,7 +2429,7 @@ local lastPlayerZone = ""
 
 function checkPlayerZone()
   local currentZone = getPlayerZone()
-  
+
   -- 플레이어가 다른 구역으로 이동한 경우에만 업데이트
   if currentZone ~= lastPlayerZone then
     client:SetContextField("playerZone", currentZone, function()
@@ -2466,14 +2468,14 @@ function initializeGame()
 function initializeFeatureFlags()
   client:On(FeatureFlags.Events.ERROR, function(error)
     print("피처 플래그 오류:", error.message)
-    
+
     -- 오류 로깅
     logError("FeatureFlags", error.message)
-    
+
     -- 기본값으로 폴백
     useDefaultFeatures()
   })
-  
+
   client:Start(function()
     print("피처 플래그 초기화 성공")
     startGame()
@@ -2508,7 +2510,7 @@ function initializeGame()
     print("피처 플래그 초기화 타임아웃, 기본값 사용")
     startGameWithDefaultFeatures()
   }, 5000)  -- 5초 타임아웃
-  
+
   client:Start(function()
     clearTimeout(initTimeout)
     print("피처 플래그 초기화 성공")
@@ -2609,13 +2611,13 @@ function checkNewFeature() {
   if client:IsEnabled("new-feature") then
     -- 노출 이벤트 기록
     client:RecordImpression("new-feature")
-    
+
     -- 분석 이벤트 전송
     trackAnalyticsEvent("feature_shown", {
       featureId = "new-feature",
       userId = getCurrentUserId()
     })
-    
+
     showNewFeature()
   }
 }
@@ -2694,10 +2696,10 @@ local client = Client.New({
   url = "https://unleash.example.com/api",
   clientKey = "your-client-key",
   appName = "your-game-name",
-  
+
   -- 모든 피처 플래그에 대해 노출 데이터 활성화
   impressionDataAll = true,
-  
+
   -- 또는 기본적으로 비활성화하고 개별 토글에서만 활성화
   impressionDataAll = false
 })
@@ -2714,7 +2716,7 @@ local client = Client.New({
 client:On(FeatureFlags.Events.IMPRESSION, function(event)
   -- 노출 이벤트 처리
   print("피처 플래그 노출:", event.featureName, "활성화:", event.enabled)
-  
+
   -- 분석 시스템으로 이벤트 전송
   trackAnalyticsEvent("feature_flag_impression", {
     featureName = event.featureName,
@@ -2723,7 +2725,7 @@ client:On(FeatureFlags.Events.IMPRESSION, function(event)
     userId = event.context.userId,
     timestamp = os.time()
   })
-  
+
   -- 변형 정보가 있는 경우
   if event.variantName then
     print("변형:", event.variantName)
@@ -2748,7 +2750,7 @@ function checkNewFeature()
     --   featureName: "new-combat-system",
     --   impressionData: { ... }
     -- }
-    
+
     initializeNewCombatSystem()
   else
     initializeLegacyCombatSystem()
@@ -2762,10 +2764,10 @@ function checkNewFeature()
 -- GetVariant 호출 시 노출 데이터 생성
 function initializeTutorial()
   local tutorialVariant = client:GetVariant("tutorial-version")
-  
+
   if tutorialVariant:IsEnabled() then
     local version = tutorialVariant:StringVariation("default")
-    
+
     -- 이 호출은 다음과 같은 노출 이벤트를 생성합니다:
     -- {
     --   eventType: "getVariant",
@@ -2776,7 +2778,7 @@ function initializeTutorial()
     --   variantName: "interactive",
     --   impressionData: { ... }
     -- }
-    
+
     if version == "interactive" then
       showInteractiveTutorial()
     elseif version == "video" then
@@ -2800,12 +2802,12 @@ client:On(FeatureFlags.Events.IMPRESSION, function(event)
   if event.featureName == "premium-features" then
     -- 프리미엄 기능 노출 데이터 수집
     local userSegment = getUserSegment(event.context.userId)
-    
+
     incrementCounter("premium_feature_impressions", {
       segment = userSegment,
       enabled = event.enabled
     })
-    
+
     -- 프리미엄 기능 활성화 비율 추적
     if event.enabled then
       incrementCounter("premium_feature_enabled", {
@@ -2827,7 +2829,7 @@ client:On(FeatureFlags.Events.IMPRESSION, function(event)
       userId = event.context.userId,
       variant = event.variantName
     })
-    
+
     -- 나중에 구매 전환율과 연결하여 분석
     -- 예: 각 변형별 구매 전환율 = 구매 수 / 노출 수
   end
@@ -2856,10 +2858,10 @@ client:On(FeatureFlags.Events.IMPRESSION, function(event)
   if event.featureName == "daily-quests" then
     -- 현재 시간 (0-23)
     local hour = os.date("*t").hour
-    
+
     -- 시간대별 노출 횟수 증가
     hourlyImpressions[hour] = hourlyImpressions[hour] + 1
-    
+
     -- 주기적으로 분석 서버에 데이터 전송
     if hourlyImpressions[hour] % 100 == 0 then
       sendAnalyticsData("hourly_feature_usage", {
@@ -2887,7 +2889,7 @@ client:On(FeatureFlags.Events.IMPRESSION, function(event)
       tostring(event.enabled),
       Util.Inspect(event.context)
     ))
-    
+
     -- 특정 사용자의 노출 데이터만 자세히 로깅
     if event.context.userId == "test-user-123" then
       logToFile("feature_flags_debug.log", Util.Inspect(event))
@@ -2951,7 +2953,7 @@ client:On(FeatureFlags.Events.IMPRESSION, function(event)
     timestamp = os.time(),
     userId = event.context.userId
   })
-  
+
   -- 배치 크기가 최대에 도달하면 전송
   if #impressionBatch >= MAX_BATCH_SIZE then
     sendImpressionBatch()
@@ -2971,7 +2973,7 @@ function sendImpressionBatch()
   -- 배치 복사 및 초기화
   local batch = Util.DeepClone(impressionBatch)
   impressionBatch = {}
-  
+
   -- 분석 서버로 배치 전송
   sendAnalyticsData("feature_impressions_batch", {
     impressions = batch,
