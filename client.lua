@@ -254,12 +254,12 @@ function Client:IsEnabled(featureName, forceSelectRealtimeToggle)
   return enabled
 end
 
-function Client:GetVariantProxy(featureName, forceSelectRealtimeToggle)
-  local variant = self:GetVariant(featureName, forceSelectRealtimeToggle)
+function Client:GetVariant(featureName, forceSelectRealtimeToggle)
+  local variant = self:GetRawVariant(featureName, forceSelectRealtimeToggle)
   return VariantProxy.New(self, featureName, variant)
 end
 
-function Client:GetVariant(featureName, forceSelectRealtimeToggle)
+function Client:GetRawVariant(featureName, forceSelectRealtimeToggle)
   if not featureName or type(featureName) ~= "string" or string.len(featureName) == 0 then
     self.logger:Warn("`featureName` is required")
     return DEFAULT_DISABLED_VARIANT
@@ -809,7 +809,7 @@ function Client:storeToggles(toggles, callback)
 
       local eventName = "update:" .. oldToggle.name
       if self.eventEmitter:HasListeners(eventName) then
-        self.eventEmitter:Emit(eventName, self:GetVariantProxy(oldToggle.name, true)) -- select realtime toggle
+        self.eventEmitter:Emit(eventName, self:GetVariant(oldToggle.name, true)) -- select realtime toggle
       end
     end
   end
@@ -830,7 +830,7 @@ function Client:storeToggles(toggles, callback)
     if emitEvent then
       local eventName = "update:" .. newToggle.name
       if self.eventEmitter:HasListeners(eventName) then
-        self.eventEmitter:Emit(eventName, self:GetVariantProxy(newToggle.name, true)) -- select realtime toggle
+        self.eventEmitter:Emit(eventName, self:GetVariant(newToggle.name, true)) -- select realtime toggle
       end
     end
   end
@@ -1119,7 +1119,7 @@ function Client:WatchToggleWithInitialState(featureName, callback)
   local off = self.eventEmitter:On(eventName, callback)
 
   local initialAction = function()
-    self.eventEmitter:Emit(eventName, self:GetVariantProxy(featureName, true)) -- select realtime toggle
+    self.eventEmitter:Emit(eventName, self:GetVariant(featureName, true)) -- select realtime toggle
   end
 
   -- If READY event has already been emitted, execute immediately
@@ -1148,23 +1148,23 @@ function Client:Tick()
 end
 
 function Client:BoolVariation(featureName, defaultValue, forceSelectRealtimeToggle)
-  local variantProxy = self:GetVariantProxy(featureName, forceSelectRealtimeToggle)
-  return variantProxy:BoolVariation(defaultValue)
+  local variant = self:GetVariant(featureName, forceSelectRealtimeToggle)
+  return variant:BoolVariation(defaultValue)
 end
 
 function Client:NumberVariation(featureName, defaultValue, forceSelectRealtimeToggle)
-  local variantProxy = self:GetVariantProxy(featureName, forceSelectRealtimeToggle)
-  return variantProxy:NumberVariation(defaultValue)
+  local variant = self:GetVariant(featureName, forceSelectRealtimeToggle)
+  return variant:NumberVariation(defaultValue)
 end
 
 function Client:StringVariation(featureName, defaultValue, forceSelectRealtimeToggle)
-  local variantProxy = self:GetVariantProxy(featureName, forceSelectRealtimeToggle)
-  return variantProxy:StringVariation(defaultValue)
+  local variant = self:GetVariant(featureName, forceSelectRealtimeToggle)
+  return variant:StringVariation(defaultValue)
 end
 
 function Client:JsonVariation(featureName, defaultValue, forceSelectRealtimeToggle)
-  local variantProxy = self:GetVariantProxy(featureName, forceSelectRealtimeToggle)
-  return variantProxy:JsonVariation(defaultValue)
+  local variant = self:GetVariant(featureName, forceSelectRealtimeToggle)
+  return variant:JsonVariation(defaultValue)
 end
 
 return Client

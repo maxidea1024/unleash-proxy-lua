@@ -149,7 +149,7 @@ client:WaitUntilReady(function()
   end
   
   -- 변형 정보 가져오기
-  local variantProxy = client:GetVariantProxy("my-feature-with-variants")
+  local variantProxy = client:GetVariant("my-feature-with-variants")
   print("변형 이름:", variantProxy:GetVariantName())
   print("기능 활성화:", variantProxy:IsEnabled())
 end)
@@ -387,7 +387,7 @@ local client = Client.New({
 })
 
 -- 테스트 코드에서 사용
-local paymentVariant = client:GetVariantProxy("payment-gateway")
+local paymentVariant = client:GetVariant("payment-gateway")
 local endpoint = paymentVariant:JsonVariation({}).endpoint
 print("테스트 엔드포인트:", endpoint)
 ```
@@ -551,7 +551,7 @@ function startMatchmaking()
   -- 매치메이킹 전 최신 플래그 동기화
   client:SyncToggles(true, function()
     -- 매치메이킹 관련 기능 확인
-    local matchmakingVariant = client:GetVariantProxy("matchmaking-algorithm")
+    local matchmakingVariant = client:GetVariant("matchmaking-algorithm")
     local algorithm = matchmakingVariant:StringVariation("default")
     
     -- 선택된 알고리즘으로 매치메이킹 시작
@@ -563,7 +563,7 @@ end
 function createGameInstance(players)
   client:SyncToggles(true, function()
     -- 게임 모드 확인
-    local gameModeVariant = client:GetVariantProxy("game-mode-settings")
+    local gameModeVariant = client:GetVariant("game-mode-settings")
     local settings = gameModeVariant:JsonVariation({})
     
     -- 설정된 게임 모드로 인스턴스 생성
@@ -585,7 +585,7 @@ function performDailyReset()
   client:SyncToggles(true, function()
     -- 오늘의 이벤트 확인
     if client:IsEnabled("daily-special-event") then
-      local eventVariant = client:GetVariantProxy("daily-special-event")
+      local eventVariant = client:GetVariant("daily-special-event")
       local eventType = eventVariant:StringVariation("none")
       activateSpecialEvent(eventType)
     end
@@ -608,14 +608,14 @@ function switchGameMode(newMode)
       local pvpFeatures = {
         matchmaking = client:IsEnabled("pvp-matchmaking"),
         ranking = client:IsEnabled("pvp-ranking"),
-        rewards = client:GetVariantProxy("pvp-rewards"):JsonVariation({})
+        rewards = client:GetVariant("pvp-rewards"):JsonVariation({})
       }
       initializePvPMode(pvpFeatures)
     else
       -- PvE 관련 기능 확인
       local pveFeatures = {
-        difficulty = client:GetVariantProxy("pve-difficulty"):StringVariation("normal"),
-        enemies = client:GetVariantProxy("pve-enemy-types"):JsonVariation({})
+        difficulty = client:GetVariant("pve-difficulty"):StringVariation("normal"),
+        enemies = client:GetVariant("pve-enemy-types"):JsonVariation({})
       }
       initializePvEMode(pveFeatures)
     end
@@ -761,9 +761,9 @@ end
 
 ### 변형(Variants)
 
-변형(Variants)는 `GetVariant()` 또는 `GetVariantProxy()` 함수를 통해서 사용할수 있습니다. `GetVariant()` 함수를 통해서 사용할 경우에는 다소 사용이 불편할수 있으므로, `GetVariantProxy()` 를 사용하는 것을 추천합니다. `GetVariant()` 함수는 `variant` 자료형을 반환하므로, 다소 사용하기 불편할수 있습니다.
+변형(Variants)는 `GetRawVariant()` 또는 `GetVariant()` 함수를 통해서 사용할수 있습니다. `GetRawVariant()` 함수를 통해서 사용할 경우에는 다소 사용이 불편할수 있으므로, `GetVariant()` 를 사용하는 것을 추천합니다. `GetRawVariant()` 함수는 `variant` 자료형을 반환하므로, 다소 사용하기 불편할수 있습니다.
 
-`GetVariantProxy` 메서드는 `VariantProxy` 객체를 반환합니다. 이 프록시 객체는 변형 데이터에 안전하게 접근할 수 있는 다양한 메서드를 제공합니다:
+`GetVariant` 메서드는 `VariantProxy` 객체를 반환합니다. 이 프록시 객체는 변형 데이터에 안전하게 접근할 수 있는 다양한 메서드를 제공합니다:
 
 - `GetFeatureName()`: 기능 이름 반환
 - `GetVariantName()`: 변형 이름 반환
@@ -776,10 +776,10 @@ end
 
 ```lua
 -- 변형 정보 가져오기
-local variant = client:GetVariantProxy("my-feature")
-print("변형 이름:", variantProxy:GetVariantName())
-print("기능 이름:", variantProxy:GetFeatureName())
-print("기능 활성화:", variantProxy:IsEnabled())
+local variant = client:GetVariant("my-feature")
+print("변형 이름:", variant:GetVariantName())
+print("기능 이름:", variant:GetFeatureName())
+print("기능 활성화:", variant:IsEnabled())
 
 -- 변형 데이터 타입별 접근
 local boolValue = variant:BoolVariation(false)
@@ -793,6 +793,155 @@ local numberValue = client:NumberVariation("my-number-feature", 0)
 local stringValue = client:StringVariation("my-string-feature", "default")
 local jsonValue = client:JsonVariation("my-json-feature", {})
 ```
+
+---
+
+# 실시간 감지
+
+# WatchToggle과 WatchToggleWithInitialState 함수 설명
+
+## WatchToggle
+
+`WatchToggle` 함수는 특정 피처 플래그의 변경 사항을 감시하는 기능을 제공합니다:
+
+1. 특정 피처 플래그(`featureName`)의 변경 사항을 감지하기 위한 이벤트 리스너를 등록합니다.
+2. 피처 플래그가 변경될 때마다 제공된 콜백 함수가 호출됩니다.
+3. 콜백 함수는 `VariantProxy` 객체를 인자로 받습니다.
+4. 함수는 이벤트 구독을 취소할 수 있는 함수를 반환합니다.
+
+## WatchToggleWithInitialState
+
+`WatchToggleWithInitialState` 함수는 `WatchToggle`의 확장 버전으로, 다음과 같은 추가 기능을 제공합니다:
+
+1. `WatchToggle`과 마찬가지로 피처 플래그 변경 사항에 대한 이벤트 리스너를 등록합니다.
+2. 추가적으로, **즉시 현재 상태에 대한 콜백을 호출**합니다. 이는 초기 상태를 바로 처리할 수 있게 해줍니다.
+3. 클라이언트가 아직 준비되지 않은 경우(READY 이벤트가 발생하지 않은 경우), READY 이벤트가 발생한 후에 초기 상태를 전달합니다.
+4. 콜백 함수는 `VariantProxy` 객체를 인자로 받습니다.
+5. 항상 최신(realtime) 토글 상태를 가져옵니다.
+
+## 두 함수의 주요 차이점
+
+1. **초기 상태 처리**:
+   - `WatchToggle`: 등록 시점 이후의 변경 사항만 감지합니다.
+   - `WatchToggleWithInitialState`: 등록 즉시 현재 상태에 대한 콜백을 호출하고, 이후 변경 사항도 감지합니다.
+
+2. **사용 시점**:
+   - `WatchToggle`: 변경 사항만 관심이 있을 때 사용합니다.
+   - `WatchToggleWithInitialState`: 초기 상태와 변경 사항 모두 처리해야 할 때 사용합니다.
+
+## 사용 예제
+
+```lua
+-- WatchToggle 사용 예제
+local unsubscribe = client:WatchToggle("new-feature", function(variantProxy)
+  print("Feature changed:", variantProxy:IsEnabled())
+  print("Variant name:", variantProxy:GetVariantName())
+  
+  if variantProxy:IsEnabled() then
+    enableNewFeature()
+  else
+    disableNewFeature()
+  end
+end)
+
+-- 나중에 구독 취소가 필요한 경우
+unsubscribe()
+
+-- WatchToggleWithInitialState 사용 예제
+client:WatchToggleWithInitialState("new-feature", function(variantProxy)
+  print("Feature state:", variantProxy:IsEnabled())
+  print("Variant name:", variantProxy:GetVariantName())
+  
+  if variantProxy:IsEnabled() then
+    enableNewFeature()
+  else
+    disableNewFeature()
+  end
+end)
+```
+
+## 실제 활용 사례
+
+### UI 컴포넌트 업데이트
+
+```lua
+-- UI 컴포넌트 초기화 시 현재 상태를 즉시 반영하고 이후 변경 사항도 처리
+function initializeUIComponent()
+  client:WatchToggleWithInitialState("new-ui-design", function(variantProxy)
+    if variantProxy:IsEnabled() then
+      local variant = variantProxy:GetVariantName()
+      if variant == "modern" then
+        applyModernUITheme()
+      elseif variant == "classic" then
+        applyClassicUITheme()
+      else
+        applyDefaultUITheme()
+      end
+    else
+      applyDefaultUITheme()
+    end
+  end)
+end
+```
+
+### 게임 기능 동적 전환
+
+```lua
+-- 게임 중 기능이 활성화/비활성화될 때 동적으로 대응
+function setupDynamicFeatures()
+  -- 초기 상태 필요 없이 변경 사항만 처리
+  client:WatchToggle("special-event", function(variantProxy)
+    if variantProxy:IsEnabled() then
+      -- 게임 중에 특별 이벤트가 활성화됨
+      showEventNotification("특별 이벤트가 시작되었습니다!")
+      startSpecialEvent()
+    else
+      -- 게임 중에 특별 이벤트가 비활성화됨
+      showEventNotification("특별 이벤트가 종료되었습니다.")
+      endSpecialEvent()
+    end
+  end)
+  
+  -- 초기 상태와 변경 사항 모두 처리
+  client:WatchToggleWithInitialState("game-difficulty", function(variantProxy)
+    local difficultyConfig = variantProxy:JsonVariation({
+      easy = { enemyDamage = 0.8, playerHealth = 1.2 },
+      normal = { enemyDamage = 1.0, playerHealth = 1.0 },
+      hard = { enemyDamage = 1.2, playerHealth = 0.8 }
+    })
+    
+    applyDifficultySettings(difficultyConfig)
+  end)
+end
+```
+
+### 변형(Variant) 데이터 활용
+
+```lua
+-- 변형 데이터를 활용한 동적 구성
+client:WatchToggleWithInitialState("item-drop-rates", function(variantProxy)
+  -- 문자열 변형 사용
+  local dropRateMode = variantProxy:StringVariation("normal")
+  
+  -- 숫자 변형 사용
+  local legendaryDropMultiplier = variantProxy:NumberVariation(1.0)
+  
+  -- JSON 변형 사용
+  local dropRateConfig = variantProxy:JsonVariation({
+    common = 70,
+    uncommon = 20,
+    rare = 8,
+    epic = 1.8,
+    legendary = 0.2
+  })
+  
+  -- 변형 데이터 적용
+  updateDropRates(dropRateMode, legendaryDropMultiplier, dropRateConfig)
+end)
+```
+
+`WatchToggleWithInitialState`는 컴포넌트 초기화 시 현재 상태를 즉시 반영해야 하는 경우에 특히 유용합니다. 예를 들어, UI 컴포넌트가 피처 플래그 상태에 따라 다르게 렌더링되어야 할 때 사용할 수 있습니다.
+`VariantProxy` 객체를 통해 피처 플래그의 활성화 상태뿐만 아니라 변형 이름, 변형 데이터(불리언, 숫자, 문자열, JSON) 등 다양한 정보에 접근할 수 있습니다.
 
 ---
 
@@ -1205,7 +1354,7 @@ function onUserLogin(userId, userInfo)
     end
     
     -- A/B 테스트
-    local uiVariant = client:GetVariantProxy("ui-redesign")
+    local uiVariant = client:GetVariant("ui-redesign")
     if uiVariant:IsEnabled() then
       applyUiTheme(uiVariant:StringVariation("classic"))
     end
@@ -1242,7 +1391,7 @@ function initializeDeviceContext()
     end
     
     -- 네트워크 최적화
-    local networkConfig = client:GetVariantProxy("network-config")
+    local networkConfig = client:GetVariant("network-config")
     if networkConfig:IsEnabled() then
       applyNetworkSettings(networkConfig:JsonVariation({}))
     end
@@ -1312,7 +1461,7 @@ function initializeInventory()
   end
   
   -- 변형을 통한 아이템 드롭률 조정
-  local dropRateConfig = client:GetVariantProxy("item-drop-rates")
+  local dropRateConfig = client:GetVariant("item-drop-rates")
   if dropRateConfig:IsEnabled() then
     setDropRates(dropRateConfig:JsonVariation({
       common: 70,
@@ -1333,7 +1482,7 @@ end
 
 ```lua
 function showTutorial()
-  local tutorialVariant = client:GetVariantProxy("tutorial-version")
+  local tutorialVariant = client:GetVariant("tutorial-version")
   
   if not tutorialVariant:IsEnabled() then
     -- 기본 튜토리얼 표시
@@ -1364,7 +1513,7 @@ end
 
 ```lua
 function initializeShop()
-  local shopVariant = client:GetVariantProxy("shop-layout")
+  local shopVariant = client:GetVariant("shop-layout")
   
   if shopVariant:IsEnabled() then
     local layout = shopVariant:StringVariation("grid")
@@ -1395,7 +1544,7 @@ function checkSeasonalEvents()
     startSnowEffect()
     
     -- 이벤트 세부 설정
-    local eventConfig = client:GetVariantProxy("christmas-event-config")
+    local eventConfig = client:GetVariant("christmas-event-config")
     if eventConfig:IsEnabled() then
       local config = eventConfig:JsonVariation({})
       setEventDuration(config.startDate, config.endDate)
@@ -1423,7 +1572,7 @@ function onGameStart()
 ```lua
 function checkWeekendBonus()
   if client:IsEnabled("weekend-bonus") then
-    local bonusConfig = client:GetVariantProxy("weekend-bonus-config")
+    local bonusConfig = client:GetVariant("weekend-bonus-config")
     if bonusConfig:IsEnabled() then
       local config = bonusConfig:JsonVariation({
         xpMultiplier: 2.0,
@@ -1465,7 +1614,7 @@ function initializeRegionalContent()
     }
     
     -- 지역별 인게임 상점 가격
-    local pricingConfig = client:GetVariantProxy("regional-pricing")
+    local pricingConfig = client:GetVariant("regional-pricing")
     if pricingConfig:IsEnabled() then
       applyRegionalPricing(pricingConfig:JsonVariation({}))
     }
@@ -1492,7 +1641,7 @@ function applyAgeRestrictions()
     
     -- 채팅 필터
     if client:IsEnabled("chat-filter") then
-      local filterConfig = client:GetVariantProxy("chat-filter-config")
+      local filterConfig = client:GetVariant("chat-filter-config")
       applyChatFilter(filterConfig:JsonVariation({}))
     }
   })
@@ -1523,7 +1672,7 @@ function initializeGameServices()
   }
   
   -- 매치메이킹 풀 크기 조정
-  local matchmakingConfig = client:GetVariantProxy("matchmaking-config")
+  local matchmakingConfig = client:GetVariant("matchmaking-config")
   if matchmakingConfig:IsEnabled() then
     configureMatchmaking(matchmakingConfig:JsonVariation({}))
   }
@@ -1566,7 +1715,7 @@ function onServerStatusUpdate(serverStatus)
 ```lua
 function initializeGameBalance()
   -- 무기 밸런스
-  local weaponBalance = client:GetVariantProxy("weapon-balance")
+  local weaponBalance = client:GetVariant("weapon-balance")
   if weaponBalance:IsEnabled() then
     applyWeaponStats(weaponBalance:JsonVariation({
       assault_rifle: { damage: 25, fireRate: 0.1, recoil: 0.3 },
@@ -1576,13 +1725,13 @@ function initializeGameBalance()
   }
   
   -- 캐릭터 능력치
-  local characterBalance = client:GetVariantProxy("character-balance")
+  local characterBalance = client:GetVariant("character-balance")
   if characterBalance:IsEnabled() then
     applyCharacterStats(characterBalance:JsonVariation({}))
   }
   
   -- 경험치 획득률
-  local progressionConfig = client:GetVariantProxy("progression-speed")
+  local progressionConfig = client:GetVariant("progression-speed")
   if progressionConfig:IsEnabled() then
     setXpMultiplier(progressionConfig:NumberVariation(1.0))
   }
@@ -1593,7 +1742,7 @@ function initializeGameBalance()
 
 ```lua
 function configureMatchmaking()
-  local matchmakingVariant = client:GetVariantProxy("matchmaking-algorithm")
+  local matchmakingVariant = client:GetVariant("matchmaking-algorithm")
   
   if matchmakingVariant:IsEnabled() then
     local algorithm = matchmakingVariant:StringVariation("skill-based")
@@ -1637,7 +1786,7 @@ function optimizeGraphicsSettings()
     }
     
     -- 그래픽 세부 설정
-    local graphicsConfig = client:GetVariantProxy("graphics-config")
+    local graphicsConfig = client:GetVariant("graphics-config")
     if graphicsConfig:IsEnabled() then
       local config = graphicsConfig:JsonVariation({})
       setRenderDistance(config.renderDistance)
@@ -1674,7 +1823,7 @@ function optimizeNetworkSettings()
     }
     
     -- 네트워크 설정
-    local networkConfig = client:GetVariantProxy("network-config")
+    local networkConfig = client:GetVariant("network-config")
     if networkConfig:IsEnabled() then
       local config = networkConfig:JsonVariation({})
       setUpdateFrequency(config.updateFrequency)
@@ -1858,7 +2007,7 @@ function quickStartGame()
 ```lua
 function checkPromotions()
   if client:IsEnabled("flash-sale") then
-    local saleConfig = client:GetVariantProxy("flash-sale-config")
+    local saleConfig = client:GetVariant("flash-sale-config")
     if saleConfig:IsEnabled() then
       local config = saleConfig:JsonVariation({
         discountPercent: 30,
@@ -2610,9 +2759,9 @@ function checkNewFeature()
 ### 변형(Variant) 노출
 
 ```lua
--- GetVariantProxy 호출 시 노출 데이터 생성
+-- GetVariant 호출 시 노출 데이터 생성
 function initializeTutorial()
-  local tutorialVariant = client:GetVariantProxy("tutorial-version")
+  local tutorialVariant = client:GetVariant("tutorial-version")
   
   if tutorialVariant:IsEnabled() then
     local version = tutorialVariant:StringVariation("default")
