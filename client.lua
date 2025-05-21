@@ -254,11 +254,6 @@ function Client:IsEnabled(featureName, forceSelectRealtimeToggle)
   return enabled
 end
 
-function Client:GetVariant(featureName, forceSelectRealtimeToggle)
-  local variant = self:GetRawVariant(featureName, forceSelectRealtimeToggle)
-  return VariantProxy.New(self, featureName, variant)
-end
-
 function Client:GetRawVariant(featureName, forceSelectRealtimeToggle)
   if not featureName or type(featureName) ~= "string" or string.len(featureName) == 0 then
     self.logger:Warn("`featureName` is required")
@@ -298,6 +293,11 @@ function Client:GetRawVariant(featureName, forceSelectRealtimeToggle)
     feature_enabled = enabled,
     payload = variant.payload
   }
+end
+
+function Client:GetVariant(featureName, forceSelectRealtimeToggle)
+  local variant = self:GetRawVariant(featureName, forceSelectRealtimeToggle)
+  return VariantProxy.New(self, featureName, variant)
 end
 
 -- Helper function to safely call user callbacks
