@@ -288,6 +288,14 @@ local function GetTempDir()
   return os.getenv("TMPDIR") or os.getenv("TEMP") or os.getenv("TMP") or "/tmp"
 end
 
+local function ToJson(obj)
+  return json.encode(obj)
+end
+
+local function FromJson(jsonStr)
+  return json.decode(jsonStr)
+end
+
 return {
   UrlWithContextAsQuery = UrlWithContextAsQuery,
   ComputeContextHashValue = ComputeContextHashValue,
@@ -303,4 +311,6 @@ return {
   GetTempDir = GetTempDir,
   UrlEncode = UrlEncode,
   UrlDecode = UrlDecode,
+  ToJson = ToJson,
+  FromJson = FromJson,
 }

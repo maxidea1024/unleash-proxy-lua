@@ -185,6 +185,10 @@ function VariantProxy:JsonVariation(defaultValue)
   return result
 end
 
+function VariantProxy:GetPayloadType()
+  return self.variant.payload and self.variant.payload.type or "<none>"
+end
+
 -- Convenience method to get any type of variation based on payload type
 function VariantProxy:GetVariation(defaultValue)
   if not self.variant or not self.variant.payload then

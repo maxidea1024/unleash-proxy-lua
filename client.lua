@@ -689,7 +689,7 @@ function Client:cancelFetchTimer()
   if self.fetchTimer then
     self.logger:Debug("Cancel fetch timer.");
 
-    self.timer:Remove(self.fetchTimer)
+    self.timer:Cancel(self.fetchTimer)
     self.fetchTimer = nil
   end
 end
@@ -711,7 +711,9 @@ function Client:Stop(callback)
     self.metricsReporter:Stop()
   end
 
-  self.timer:RemoveAll()
+  if self.timer then
+    self.timer:CancelAll()
+  end
 
   self.started = false
 
@@ -735,7 +737,9 @@ function Client:GetError()
 end
 
 function Client:SendMetrics()
-  return self.metricsReporter:SendMetrics()
+  if self.metricsReporter then
+    self.metricsReporter:SendMetrics()
+  end
 end
 
 function Client:resolveSessionId(callback)
@@ -806,10 +810,9 @@ function Client:storeToggles(toggles, callback)
     local toggleIsDisabled = newToggle == nil
     if toggleIsDisabled then
       self.logger:Info("Feature flag `%s` is disabled.", oldToggle.name)
-
       local eventName = "update:" .. oldToggle.name
       if self.eventEmitter:HasListeners(eventName) then
-        self.eventEmitter:Emit(eventName, self:GetVariant(oldToggle.name, true)) -- select realtime toggle
+        self.eventEmitter:Emit(eventName, self:GetVariant(oldToggle.name, true)) -- force select realtime toggle
       end
     end
   end
@@ -830,7 +833,7 @@ function Client:storeToggles(toggles, callback)
     if emitEvent then
       local eventName = "update:" .. newToggle.name
       if self.eventEmitter:HasListeners(eventName) then
-        self.eventEmitter:Emit(eventName, self:GetVariant(newToggle.name, true)) -- select realtime toggle
+        self.eventEmitter:Emit(eventName, self:GetVariant(newToggle.name, true)) -- force select realtime toggle
       end
     end
   end
