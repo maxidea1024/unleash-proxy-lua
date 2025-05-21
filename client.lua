@@ -1,3 +1,5 @@
+-- TODO emit(Events.ERROR, ...) 처리시에 오류 로깅 개선(stacktrace 가 안이쁘게 출력되고 있음.)
+
 local Json = require("framework.3rdparty.feature-flags.dkjson")
 local Timer = require("framework.3rdparty.feature-flags.timer")
 local MetricsReporter = require("framework.3rdparty.feature-flags.metrics-reporter")
@@ -83,17 +85,23 @@ local Client = {}
 Client.__index = Client
 
 function Client.New(config)
+  if not config or type(config) ~= "table" then error("`config` is required") end
+
   local self = setmetatable({}, Client)
 
-  --TODO enableDevMode
-
+  -- setup logger
   self.loggerFactory = config.loggerFactory or Logger.DefaultLoggerFactory.New(Logger.LogLevel.Log)
   self.logger = self.loggerFactory:CreateLogger("UnleashClient")
+
+  self.enableDevMode = config.enableDevMode or false
+  if self.enableDevMode then
+    self.logger:Info("Development mode enabled - detailed error information will be included.")
+  end
+
   self.offline = config.offline or false
 
   -- Validate required fields
   if not config.appName then error("`appName` is required") end
-
   if not self.offline then
     if not config.url then error("`url` is required") end
     if not config.request then error("`request` is required") end
@@ -103,11 +111,9 @@ function Client.New(config)
   self.sdkName = SdkVersion
   self.connectionId = Util.Uuid()
 
-  self.toggleMap = convertToggleArrayToMap(config.bootstrap or {})
-  -- Explicit synchronization mode
+  self.realtimeToggleMap = convertToggleArrayToMap(config.bootstrap or {})
   self.useExplicitSyncMode = config.useExplicitSyncMode or false
-  self.synchronizedToggleMap = Util.DeepClone(self.toggleMap)
-  self.forceSelectRealtimeToggleMap = false
+  self.synchronizedToggleMap = Util.DeepClone(self.realtimeToggleMap)
 
   self.context = {
     -- static context
@@ -194,10 +200,10 @@ end
 
 function Client:WaitUntilReady(callback)
   if self.readyEventEmitted then
-    self:callCallbackWithGuard(callback)
+    self:callWithGuard(callback)
   else
-    self:On(Events.READY, function()
-      self:callCallbackWithGuard(callback)
+    self:Once(Events.READY, function()
+      self:callWithGuard(callback)
     end)
   end
 end
@@ -217,13 +223,13 @@ function Client:GetAllEnabledToggles()
   return result
 end
 
-function Client:IsEnabled(featureName)
+function Client:IsEnabled(featureName, forceSelectRealtimeToggle)
   if not featureName or type(featureName) ~= "string" or string.len(featureName) == 0 then
     self.logger:Error("`featureName` is required")
     return false
   end
 
-  local toggleMap = self:selectToggleMap()
+  local toggleMap = self:selectToggleMap(forceSelectRealtimeToggle)
 
   local toggle = toggleMap[featureName]
   local enabled = (toggle and toggle.enabled) or false
@@ -248,18 +254,18 @@ function Client:IsEnabled(featureName)
   return enabled
 end
 
-function Client:GetVariant(featureName)
-  local rawVariant = self:getRawVariant(featureName)
-  return VariantProxy.New(self, featureName, rawVariant)
+function Client:GetVariantProxy(featureName, forceSelectRealtimeToggle)
+  local variant = self:GetVariant(featureName, forceSelectRealtimeToggle)
+  return VariantProxy.New(self, featureName, variant)
 end
 
-function Client:getRawVariant(featureName)
+function Client:GetVariant(featureName, forceSelectRealtimeToggle)
   if not featureName or type(featureName) ~= "string" or string.len(featureName) == 0 then
     self.logger:Warn("`featureName` is required")
     return DEFAULT_DISABLED_VARIANT
   end
 
-  local toggleMap = self:selectToggleMap()
+  local toggleMap = self:selectToggleMap(forceSelectRealtimeToggle)
 
   local toggle = toggleMap[featureName]
   local enabled = (toggle and toggle.enabled) or false
@@ -295,18 +301,21 @@ function Client:getRawVariant(featureName)
 end
 
 -- Helper function to safely call user callbacks
-function Client:callCallbackWithGuard(callback, ...)
+function Client:callWithGuard(callback, ...)
+  -- FIXME callback이 지정안된 경우는 오류로 취급해야하지 않을까?
   if not callback or type(callback) ~= "function" then
     return
   end
 
   local success, result = pcall(callback, ...)
   if not success then
-    self.logger:Error("Error in user callback: %s", tostring(result))
+    local errorMsg = tostring(result)
+
+    self.logger:Error("Error in user callback: %s", errorMsg)
 
     self:emit(Events.ERROR, {
       type = "CallbackError",
-      message = tostring(result)
+      message = errorMsg
     })
   end
   return success, result
@@ -314,7 +323,7 @@ end
 
 function Client:UpdateToggles(callback)
   if self.offline then
-    self:callCallbackWithGuard(callback)
+    self:callWithGuard(callback)
     return
   end
 
@@ -330,19 +339,48 @@ function Client:UpdateToggles(callback)
     self:Once(Events.READY, function()
       self:cancelFetchTimer()
       self:fetchToggles(function()
-        self:callCallbackWithGuard(callback)
+        self:callWithGuard(callback)
       end)
     end)
   else
     -- If not started yet, we'll fetch toggles after start anyway,
     -- so we can skip fetching toggles here.
-    self:callCallbackWithGuard(callback)
+    self:callWithGuard(callback)
   end
+end
+
+function Client:anyContextFieldHasChanged(fields)
+  for key, val in pairs(fields) do
+    if key == "userId" then
+      if self.context.userId ~= val then
+        return true
+      end
+    elseif key == "sessionId" then
+      if self.context.sessionId ~= val then
+        return true
+      end
+    elseif key == "remoteAddress" then
+      if self.context.remoteAddress ~= val then
+        return true
+      end
+    elseif key == "currentTime" then
+      if self.context.currentTime ~= val then
+        return true
+      end
+    else
+      if self.context.properties[key] ~= val then
+        return true
+      end
+    end
+  end
+
+  -- nothing changed
+  return false
 end
 
 function Client:UpdateContext(context, callback)
   if self.offline then
-    self:callCallbackWithGuard(callback)
+    self:callWithGuard(callback)
     return
   end
 
@@ -376,7 +414,7 @@ end
 
 function Client:SetContextField(field, value, callback)
   if self.offline then
-    self:callCallbackWithGuard(callback)
+    self:callWithGuard(callback)
     return
   end
 
@@ -400,26 +438,26 @@ function Client:SetContextField(field, value, callback)
   if changed then
     self:UpdateToggles(callback)
   else
-    self:callCallbackWithGuard(callback)
+    self:callWithGuard(callback)
   end
 end
 
 function Client:RemoveContextField(field, callback)
   if self.offline then
-    self:callCallbackWithGuard(callback)
+    self:callWithGuard(callback)
     return
   end
 
   if isDefinedContextField(field) then
     if not self.context[field] then
-      self:callCallbackWithGuard(callback)
+      self:callWithGuard(callback)
       return
     end
 
     self.context[field] = nil
   elseif self.context.properties and type(self.context.properties) == "table" then
     if not self.context.properties[field] then
-      self:callCallbackWithGuard(callback)
+      self:callWithGuard(callback)
       return
     end
 
@@ -442,24 +480,24 @@ function Client:init(callback)
   self:resolveSessionId(function(sessionId)
     self.context.sessionId = sessionId
 
-    self.storage:Get(TOGGLES_KEY, function(toggles)
-      self.toggleMap = convertToggleArrayToMap(toggles or {})
+    self.storage:Load(TOGGLES_KEY, function(toggles)
+      self.realtimeToggleMap = convertToggleArrayToMap(toggles or {})
       if self.useExplicitSyncMode then
-        self.synchronizedToggleMap = Util.DeepClone(self.toggleMap)
+        self.synchronizedToggleMap = Util.DeepClone(self.realtimeToggleMap)
       end
 
-      self.storage:Get(ETAG_KEY, function(etag)
+      self.storage:Load(ETAG_KEY, function(etag)
         self.etag = etag
       end)
 
       self:loadLastRefreshTimestamp(function(timestamp)
         self.lastRefreshTimestamp = timestamp
 
-        if self.bootstrap and (self.bootstrapOverride or Util.IsEmptyTable(self.toggleMap)) then
-          self.storage:Save(TOGGLES_KEY, self.bootstrap, function()
-            self.toggleMap = convertToggleArrayToMap(self.bootstrap)
+        if self.bootstrap and (self.bootstrapOverride or Util.IsEmptyTable(self.realtimeToggleMap)) then
+          self.storage:Store(TOGGLES_KEY, self.bootstrap, function()
+            self.realtimeToggleMap = convertToggleArrayToMap(self.bootstrap)
             if self.useExplicitSyncMode then
-              self.synchronizedToggleMap = Util.DeepClone(self.toggleMap)
+              self.synchronizedToggleMap = Util.DeepClone(self.realtimeToggleMap)
             end
 
             self.sdkState = "healthy"
@@ -468,13 +506,13 @@ function Client:init(callback)
             self:storeLastRefreshTimestamp(function()
               self:emit(Events.INIT)
               self:setReady()
-              self:callCallbackWithGuard(callback)
+              self:callWithGuard(callback)
             end)
           end)
         else
           self.sdkState = "healthy"
           self:emit(Events.INIT)
-          self:callCallbackWithGuard(callback)
+          self:callWithGuard(callback)
         end
       end)
     end)
@@ -487,7 +525,7 @@ function Client:Start(callback)
     -- TODO error 이벤트를 발생시켜줘야하나?
 
     self.logger:Error("Client has already started, call Stop() before restarting.")
-    self:callCallbackWithGuard(callback)
+    self:callWithGuard(callback)
     return
   end
 
@@ -523,7 +561,7 @@ function Client:Start(callback)
     if self.offline then
       self:setReady()
 
-      self:callCallbackWithGuard(callback)
+      self:callWithGuard(callback)
 
       self.logger:Info("Client is started.")
     else
@@ -532,7 +570,7 @@ function Client:Start(callback)
           self.metricsReporter:Start()
         end
 
-        self:callCallbackWithGuard(callback)
+        self:callWithGuard(callback)
 
         self.logger:Info("Client is started.")
       end)
@@ -559,52 +597,48 @@ end
 function Client:handleConfigurationError(url, statusCode)
   self.failures = self.failures + 1
 
+  local errorMsg = url .. " responded " .. statusCode ..
+    " which means your API key is not allowed to connect. Stopping refresh of toggles"
+
+  self.logger:Error("No more fetches will be performed. Please check that the token for API calls is correct!")
+
   self:emit(Events.ERROR, {
     type = "ConfigurationError",
-    message = url ..
-        " responded " ..
-        statusCode .. " which means your API key is not allowed to connect. Stopping refresh of toggles",
+    message = errorMsg,
     code = statusCode,
   })
 
-  self.logger:Error("No more fetches will be performed. Please check that the token for API calls is correct!")
   return 0 -- stop fetching
 end
 
 function Client:handleRecoverableError(url, statusCode)
   local nextFetchDelay = self:backoff()
+  local errorType, errorMsg
 
   if statusCode == 429 then -- too many request
-    self:emit(Events.ERROR, {
-      type = "RateLimitError",
-      message = url ..
-          " responded " ..
-          statusCode ..
-          " which means you are being rate limited. Stopping refresh of toggles for " .. nextFetchDelay .. " seconds",
-      code = statusCode,
-    })
+    errorType = "RateLimitError"
+    errorMsg = url .. " responded " .. statusCode ..
+      " which means you are being rate limited. Stopping refresh of toggles for " .. nextFetchDelay .. " seconds"
   elseif statusCode == 404 then -- not found
-    self:emit(Events.ERROR, {
-      type = "NotFoundError",
-      message = url ..
-          " responded " ..
-          statusCode ..
-          " which means the resource was not found. Stopping refresh of toggles for " .. nextFetchDelay .. " seconds",
-      code = statusCode,
-    })
+    errorType = "NotFoundError"
+    errorMsg = url .. " responded " .. statusCode ..
+      " which means the resource was not found. Stopping refresh of toggles for " .. nextFetchDelay .. " seconds"
   elseif statusCode == 500 or -- internal server error
       statusCode == 502 or    -- bad gate way
       statusCode == 503 or    -- service unavailable
       statusCode == 504 then  -- gateway timeout
-    self:emit(Events.ERROR, {
-      type = "ServerError",
-      message = url ..
-          " responded " ..
-          statusCode ..
-          " which means the server is having issues. Stopping refresh of toggles for " .. nextFetchDelay .. " seconds",
-      code = statusCode,
-    })
+    errorType = "ServerError"
+    errorMsg = url .. " responded " .. statusCode ..
+      " which means the server is having issues. Stopping refresh of toggles for " .. nextFetchDelay .. " seconds"
   end
+
+  self.logger:Error(errorMsg)
+
+  self:emit(Events.ERROR, {
+    type = errorType,
+    message = errorMsg,
+    code = statusCode,
+  })
 
   return nextFetchDelay
 end
@@ -642,7 +676,6 @@ function Client:timedFetch(interval)
   -- interval이 0보다 작거나 같으면, timer를 예약하지 않음.
   -- (의도된 동작임. 복구 불가능한 에러가 발생했을 경우에는 더이상 시도하지 않음. 토큰 오류 같은 경우)
 
-  -- if interval > 0 and self.mode.type == "polling" then
   if interval > 0 then
     self.logger:Debug("Schedule a request to fetch toggles after %.2f seconds.", interval)
 
@@ -707,19 +740,19 @@ end
 
 function Client:resolveSessionId(callback)
   if self.context.sessionId then
-    self:callCallbackWithGuard(callback, self.context.sessionId)
+    self:callWithGuard(callback, self.context.sessionId)
     return
   end
 
-  self.storage:Get(SESSION_ID_KEY, function(sessionId)
+  self.storage:Load(SESSION_ID_KEY, function(sessionId)
     if not sessionId then
       sessionId = tostring(math.random(1, 1000000000))
       -- sessionId = Util.uuid()
-      self.storage:Save(SESSION_ID_KEY, sessionId, function()
-        self:callCallbackWithGuard(callback, sessionId)
+      self.storage:Store(SESSION_ID_KEY, sessionId, function()
+        self:callWithGuard(callback, sessionId)
       end)
     else
-      self:callCallbackWithGuard(callback, sessionId)
+      self:callWithGuard(callback, sessionId)
     end
   end)
 end
@@ -754,7 +787,7 @@ end
 function Client:storeToggles(toggles, callback)
   local newToggleArray = toggles or {}
 
-  local oldToggleMap = self.toggleMap or {}
+  local oldToggleMap = self.realtimeToggleMap or {}
   local newToggleMap = convertToggleArrayToMap(newToggleArray)
 
   if self.logger:IsEnabled(Logger.LogLevel.Debug) then
@@ -762,10 +795,10 @@ function Client:storeToggles(toggles, callback)
     self.logger:Debug("Toggles updated: newToggles=%s", Json.encode(newToggleMap))
   end
 
-  self.toggleMap = newToggleMap
+  self.realtimeToggleMap = newToggleMap
 
   self:emit(Events.UPDATE, newToggleArray)
-  self.storage:Save(TOGGLES_KEY, newToggleArray, callback)
+  self.storage:Store(TOGGLES_KEY, newToggleArray, callback)
 
   -- Detects disabled flags
   for _, oldToggle in pairs(oldToggleMap) do
@@ -776,8 +809,7 @@ function Client:storeToggles(toggles, callback)
 
       local eventName = "update:" .. oldToggle.name
       if self.eventEmitter:HasListeners(eventName) then
-        self.forceSelectRealtimeToggleMap = true -- once
-        self.eventEmitter:Emit(eventName, self:GetVariant(oldToggle.name))
+        self.eventEmitter:Emit(eventName, self:GetVariantProxy(oldToggle.name, true)) -- select realtime toggle
       end
     end
   end
@@ -798,8 +830,7 @@ function Client:storeToggles(toggles, callback)
     if emitEvent then
       local eventName = "update:" .. newToggle.name
       if self.eventEmitter:HasListeners(eventName) then
-        self.forceSelectRealtimeToggleMap = true -- once
-        self.eventEmitter:Emit(eventName, self:GetVariant(newToggle.name))
+        self.eventEmitter:Emit(eventName, self:GetVariantProxy(newToggle.name, true)) -- select realtime toggle
       end
     end
   end
@@ -823,13 +854,13 @@ end
 
 function Client:loadLastRefreshTimestamp(callback)
   if self:isTogglesStorageTTLEnabled() then
-    self.storage:Get(LAST_UPDATE_KEY, function(lastRefresh)
+    self.storage:Load(LAST_UPDATE_KEY, function(lastRefresh)
       local contextHash = Util.computeContextHashValue(self.context)
       local timestamp = (lastRefresh and lastRefresh.key == contextHash) and lastRefresh.timestamp or 0
-      self:callCallbackWithGuard(callback, timestamp)
+      self:callWithGuard(callback, timestamp)
     end)
   else
-    self:callCallbackWithGuard(callback, 0)
+    self:callWithGuard(callback, 0)
   end
 end
 
@@ -841,9 +872,9 @@ function Client:storeLastRefreshTimestamp(callback)
       key = contextHash,
       timestamp = self.lastRefreshTimestamp
     }
-    self.storage:Save(LAST_UPDATE_KEY, lastUpdateValue, callback)
+    self.storage:Store(LAST_UPDATE_KEY, lastUpdateValue, callback)
   else
-    self:callCallbackWithGuard(callback)
+    self:callWithGuard(callback)
   end
 end
 
@@ -858,14 +889,14 @@ function Client:initialFetchToggles(callback)
 
     self:timedFetch(self.refreshInterval)
 
-    self:callCallbackWithGuard(callback)
+    self:callWithGuard(callback)
   else
     self:fetchToggles(function(err)
       if not err and self.useExplicitSyncMode then
-        self.synchronizedToggleMap = Util.DeepClone(self.toggleMap)
+        self.synchronizedToggleMap = Util.DeepClone(self.realtimeToggleMap)
       end
 
-      self:callCallbackWithGuard(callback, err)
+      self:callWithGuard(callback, err)
     end)
   end
 end
@@ -909,7 +940,7 @@ function Client:fetchToggles(callback)
         self:emit(Events.ERROR, error)
         self.lastError = error
 
-        self:callCallbackWithGuard(callback, error)
+        self:callWithGuard(callback, error)
 
         return -- stop fetching no more
       end
@@ -926,11 +957,11 @@ function Client:fetchToggles(callback)
         end
 
         self:storeLastRefreshTimestamp(function()
-          self.storage:Save(ETAG_KEY, self.etag, function()
+          self.storage:Store(ETAG_KEY, self.etag, function()
             local nextFetchDelay = self:countSuccess()
             self:timedFetch(nextFetchDelay)
 
-            self:callCallbackWithGuard(callback, nil)
+            self:callWithGuard(callback, nil)
           end)
         end)
       end)
@@ -946,7 +977,7 @@ function Client:fetchToggles(callback)
       end
 
       self:storeLastRefreshTimestamp(function()
-        self:callCallbackWithGuard(callback, nil)
+        self:callWithGuard(callback, nil)
 
         local nextFetchDelay = self:countSuccess()
         self:timedFetch(nextFetchDelay)
@@ -967,12 +998,39 @@ function Client:fetchToggles(callback)
       local nextFetchDelay = self:handleErrorCases(url, response.status)
       self:timedFetch(nextFetchDelay)
 
-      self:callCallbackWithGuard(callback, error)
+      self:callWithGuard(callback, error)
     end
   end)
 end
 
 function Client:emit(event, ...)
+  if event == Events.ERROR and self.enableDevMode then
+    local args = { ... }
+    if #args > 0 then
+      local errorData = args[1]
+
+      -- Only add stack trace if it doesn't already exist
+      if type(errorData) == "table" and not errorData.stackTrace then
+        if debug and debug.traceback then
+          errorData.stackTrace = debug.traceback("", 2)
+
+          -- Log the error with stack trace
+          if errorData.message then
+            self.logger:Error("%s\nStack trace:\n%s", errorData.message, errorData.stackTrace)
+          end
+        end
+      end
+
+      -- Call original emit with modified error data
+      return self:_emit(event, errorData, select(2, ...))
+    end
+  end
+
+  -- For non-error events or when not in dev mode, call original emit
+  return self:_emit(event, ...)
+end
+
+function Client:_emit(event, ...)
   if self.eventEmitter:HasListeners(event) then
     if self.logger:IsEnabled(Logger.LogLevel.Debug) then
       local argCount = select("#", ...)
@@ -1000,33 +1058,32 @@ function Client:Off(event, callback)
   self.eventEmitter:Off(event, callback)
 end
 
-function Client:selectToggleMap()
-  if self.forceSelectRealtimeToggleMap then
-    self.forceSelectRealtimeToggleMap = false
-    return self.toggleMap
+function Client:selectToggleMap(forceSelectRealtimeToggle)
+  if forceSelectRealtimeToggle == true then
+    return self.realtimeToggleMap
   end
 
   if self.useExplicitSyncMode then
     return self.synchronizedToggleMap
   else
-    return self.toggleMap
+    return self.realtimeToggleMap
   end
 end
 
 function Client:SyncToggles(fetchNow, callback)
   if not self.useExplicitSyncMode then
-    self:callCallbackWithGuard(callback)
+    self:callWithGuard(callback)
     return
   end
 
   if fetchNow then
     self:UpdateToggles(function()
-      self.synchronizedToggleMap = Util.DeepClone(self.toggleMap)
-      self:callCallbackWithGuard(callback)
+      self.synchronizedToggleMap = Util.DeepClone(self.realtimeToggleMap)
+      self:callWithGuard(callback)
     end)
   else
-    self.synchronizedToggleMap = Util.DeepClone(self.toggleMap)
-    self:callCallbackWithGuard(callback)
+    self.synchronizedToggleMap = Util.DeepClone(self.realtimeToggleMap)
+    self:callWithGuard(callback)
   end
 end
 
@@ -1062,8 +1119,7 @@ function Client:WatchToggleWithInitialState(featureName, callback)
   local off = self.eventEmitter:On(eventName, callback)
 
   local initialAction = function()
-    self.forceSelectRealtimeToggleMap = true -- once
-    self.eventEmitter:Emit(eventName, self:GetVariant(featureName))
+    self.eventEmitter:Emit(eventName, self:GetVariantProxy(featureName, true)) -- select realtime toggle
   end
 
   -- If READY event has already been emitted, execute immediately
@@ -1091,24 +1147,24 @@ function Client:Tick()
   self.timer:Tick()
 end
 
-function Client:BoolVariation(featureName, defaultValue)
-  local variant = self:GetVariant(featureName)
-  return variant:BoolVariation(defaultValue)
+function Client:BoolVariation(featureName, defaultValue, forceSelectRealtimeToggle)
+  local variantProxy = self:GetVariantProxy(featureName, forceSelectRealtimeToggle)
+  return variantProxy:BoolVariation(defaultValue)
 end
 
-function Client:NumberVariation(featureName, defaultValue)
-  local variant = self:GetVariant(featureName)
-  return variant:NumberVariation(defaultValue)
+function Client:NumberVariation(featureName, defaultValue, forceSelectRealtimeToggle)
+  local variantProxy = self:GetVariantProxy(featureName, forceSelectRealtimeToggle)
+  return variantProxy:NumberVariation(defaultValue)
 end
 
-function Client:StringVariation(featureName, defaultValue)
-  local variant = self:GetVariant(featureName)
-  return variant:StringVariation(defaultValue)
+function Client:StringVariation(featureName, defaultValue, forceSelectRealtimeToggle)
+  local variantProxy = self:GetVariantProxy(featureName, forceSelectRealtimeToggle)
+  return variantProxy:StringVariation(defaultValue)
 end
 
-function Client:JsonVariation(featureName, defaultValue)
-  local variant = self:GetVariant(featureName)
-  return variant:JsonVariation(defaultValue)
+function Client:JsonVariation(featureName, defaultValue, forceSelectRealtimeToggle)
+  local variantProxy = self:GetVariantProxy(featureName, forceSelectRealtimeToggle)
+  return variantProxy:JsonVariation(defaultValue)
 end
 
 return Client

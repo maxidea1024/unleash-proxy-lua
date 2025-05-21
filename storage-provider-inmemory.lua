@@ -10,7 +10,7 @@ function InMemoryStorageProvider.New(loggerFactory)
   return self
 end
 
-function InMemoryStorageProvider:Save(key, data, callback)
+function InMemoryStorageProvider:Store(key, data, callback)
   if type(key) ~= "string" then
     self.logger:error("Invalid key type: " .. type(key))
     callback("Invalid key type")
@@ -21,7 +21,7 @@ function InMemoryStorageProvider:Save(key, data, callback)
   callback(nil)
 end
 
-function InMemoryStorageProvider:Get(key, callback)
+function InMemoryStorageProvider:Load(key, callback)
   if type(key) ~= "string" then
     self.logger:error("Invalid key type: " .. type(key))
     callback(nil, "Invalid key type")
@@ -32,7 +32,7 @@ function InMemoryStorageProvider:Get(key, callback)
   callback(data, nil)
 end
 
-function InMemoryStorageProvider:SaveSync(key, data)
+function InMemoryStorageProvider:StoreSync(key, data)
   if type(key) ~= "string" then
     self.logger:error("Invalid key type: " .. type(key))
     return false, "Invalid key type"
@@ -42,7 +42,7 @@ function InMemoryStorageProvider:SaveSync(key, data)
   return true, nil
 end
 
-function InMemoryStorageProvider:GetSync(key)
+function InMemoryStorageProvider:LoadSync(key)
   if type(key) ~= "string" then
     self.logger:error("Invalid key type: " .. type(key))
     return nil, "Invalid key type"

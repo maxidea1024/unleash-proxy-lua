@@ -14,7 +14,7 @@ function FileStorageProvider.New(backupPath, prefix, loggerFactory)
   return self
 end
 
-function FileStorageProvider:Save(key, data, callback)
+function FileStorageProvider:Store(key, data, callback)
   callback = callback or function(err) end
 
   local filename = self:getStorageFilename(key)
@@ -45,7 +45,7 @@ function FileStorageProvider:Save(key, data, callback)
   callback(nil)
 end
 
-function FileStorageProvider:Get(key, callback)
+function FileStorageProvider:Load(key, callback)
   local filename = self:getStorageFilename(key)
   local file, err = io.open(filename, "r")
   if not file then
@@ -84,7 +84,7 @@ function FileStorageProvider:Get(key, callback)
   callback(data, nil)
 end
 
-function FileStorageProvider:SaveSync(key, data)
+function FileStorageProvider:StoreSync(key, data)
   local filename = self:getStorageFilename(key)
   local success, jsonData = pcall(Json.encode, data)
   if not success or type(jsonData) ~= "string" then
@@ -110,7 +110,7 @@ function FileStorageProvider:SaveSync(key, data)
   return true, nil
 end
 
-function FileStorageProvider:GetSync(key)
+function FileStorageProvider:LoadSync(key)
   local filename = self:getStorageFilename(key)
   local file, err = io.open(filename, "r")
   if not file then

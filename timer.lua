@@ -1,6 +1,3 @@
--- Original source code:
---   https://github.com/sniper00/lua_timer/blob/master/timer.lua
-
 local Timer = {}
 Timer.__index = Timer
 
@@ -75,11 +72,11 @@ function Timer:Sleep(seconds)
   return coroutine.yield()
 end
 
-function Timer:Remove(ctx)
-  ctx.remove = true
+function Timer:Cancel(ctx)
+  ctx.canceled = true
 end
 
-function Timer:RemoveAll()
+function Timer:CancelAll()
   self.timers = {}
 end
 
@@ -91,7 +88,7 @@ function Timer:Tick()
     if timer.expireAt <= now then
       table.remove(self.timers, 1)
 
-      if not timer.remove then
+      if not timer.canceled then
         local ok, err = xpcall(timer.fn, debug.traceback)
         if not ok then
           self.logger:error("timer error:", err)
