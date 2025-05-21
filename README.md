@@ -149,9 +149,9 @@ client:WaitUntilReady(function()
   end
   
   -- 변형 정보 가져오기
-  local variantProxy = client:GetVariant("my-feature-with-variants")
-  print("변형 이름:", variantProxy:GetVariantName())
-  print("기능 활성화:", variantProxy:IsEnabled())
+  local variant = client:GetVariant("my-feature-with-variants")
+  print("변형 이름:", variant:GetVariantName())
+  print("기능 활성화:", variant:IsEnabled())
 end)
 ```
 
@@ -833,11 +833,11 @@ local jsonValue = client:JsonVariation("my-json-feature", {})
 
 ```lua
 -- WatchToggle 사용 예제
-local unsubscribe = client:WatchToggle("new-feature", function(variantProxy)
-  print("Feature changed:", variantProxy:IsEnabled())
-  print("Variant name:", variantProxy:GetVariantName())
+local unsubscribe = client:WatchToggle("new-feature", function(variant)
+  print("Feature changed:", variant:IsEnabled())
+  print("Variant name:", variant:GetVariantName())
   
-  if variantProxy:IsEnabled() then
+  if variant:IsEnabled() then
     enableNewFeature()
   else
     disableNewFeature()
@@ -848,11 +848,11 @@ end)
 unsubscribe()
 
 -- WatchToggleWithInitialState 사용 예제
-client:WatchToggleWithInitialState("new-feature", function(variantProxy)
-  print("Feature state:", variantProxy:IsEnabled())
-  print("Variant name:", variantProxy:GetVariantName())
+client:WatchToggleWithInitialState("new-feature", function(variant)
+  print("Feature state:", variant:IsEnabled())
+  print("Variant name:", variant:GetVariantName())
   
-  if variantProxy:IsEnabled() then
+  if variant:IsEnabled() then
     enableNewFeature()
   else
     disableNewFeature()
@@ -867,9 +867,9 @@ end)
 ```lua
 -- UI 컴포넌트 초기화 시 현재 상태를 즉시 반영하고 이후 변경 사항도 처리
 function initializeUIComponent()
-  client:WatchToggleWithInitialState("new-ui-design", function(variantProxy)
-    if variantProxy:IsEnabled() then
-      local variant = variantProxy:GetVariantName()
+  client:WatchToggleWithInitialState("new-ui-design", function(variant)
+    if variant:IsEnabled() then
+      local variant = variant:GetVariantName()
       if variant == "modern" then
         applyModernUITheme()
       elseif variant == "classic" then
@@ -890,8 +890,8 @@ end
 -- 게임 중 기능이 활성화/비활성화될 때 동적으로 대응
 function setupDynamicFeatures()
   -- 초기 상태 필요 없이 변경 사항만 처리
-  client:WatchToggle("special-event", function(variantProxy)
-    if variantProxy:IsEnabled() then
+  client:WatchToggle("special-event", function(variant)
+    if variant:IsEnabled() then
       -- 게임 중에 특별 이벤트가 활성화됨
       showEventNotification("특별 이벤트가 시작되었습니다!")
       startSpecialEvent()
@@ -903,8 +903,8 @@ function setupDynamicFeatures()
   end)
   
   -- 초기 상태와 변경 사항 모두 처리
-  client:WatchToggleWithInitialState("game-difficulty", function(variantProxy)
-    local difficultyConfig = variantProxy:JsonVariation({
+  client:WatchToggleWithInitialState("game-difficulty", function(variant)
+    local difficultyConfig = variant:JsonVariation({
       easy = { enemyDamage = 0.8, playerHealth = 1.2 },
       normal = { enemyDamage = 1.0, playerHealth = 1.0 },
       hard = { enemyDamage = 1.2, playerHealth = 0.8 }
@@ -919,15 +919,15 @@ end
 
 ```lua
 -- 변형 데이터를 활용한 동적 구성
-client:WatchToggleWithInitialState("item-drop-rates", function(variantProxy)
+client:WatchToggleWithInitialState("item-drop-rates", function(variant)
   -- 문자열 변형 사용
-  local dropRateMode = variantProxy:StringVariation("normal")
+  local dropRateMode = variant:StringVariation("normal")
   
   -- 숫자 변형 사용
-  local legendaryDropMultiplier = variantProxy:NumberVariation(1.0)
+  local legendaryDropMultiplier = variant:NumberVariation(1.0)
   
   -- JSON 변형 사용
-  local dropRateConfig = variantProxy:JsonVariation({
+  local dropRateConfig = variant:JsonVariation({
     common = 70,
     uncommon = 20,
     rare = 8,

@@ -598,7 +598,7 @@ function Client:handleConfigurationError(url, statusCode)
   self.failures = self.failures + 1
 
   local errorMsg = url .. " responded " .. statusCode ..
-    " which means your API key is not allowed to connect. Stopping refresh of toggles"
+      " which means your API key is not allowed to connect. Stopping refresh of toggles"
 
   self.logger:Error("No more fetches will be performed. Please check that the token for API calls is correct!")
 
@@ -618,18 +618,18 @@ function Client:handleRecoverableError(url, statusCode)
   if statusCode == 429 then -- too many request
     errorType = "RateLimitError"
     errorMsg = url .. " responded " .. statusCode ..
-      " which means you are being rate limited. Stopping refresh of toggles for " .. nextFetchDelay .. " seconds"
+        " which means you are being rate limited. Stopping refresh of toggles for " .. nextFetchDelay .. " seconds"
   elseif statusCode == 404 then -- not found
     errorType = "NotFoundError"
     errorMsg = url .. " responded " .. statusCode ..
-      " which means the resource was not found. Stopping refresh of toggles for " .. nextFetchDelay .. " seconds"
+        " which means the resource was not found. Stopping refresh of toggles for " .. nextFetchDelay .. " seconds"
   elseif statusCode == 500 or -- internal server error
       statusCode == 502 or    -- bad gate way
       statusCode == 503 or    -- service unavailable
       statusCode == 504 then  -- gateway timeout
     errorType = "ServerError"
     errorMsg = url .. " responded " .. statusCode ..
-      " which means the server is having issues. Stopping refresh of toggles for " .. nextFetchDelay .. " seconds"
+        " which means the server is having issues. Stopping refresh of toggles for " .. nextFetchDelay .. " seconds"
   end
 
   self.logger:Error(errorMsg)
@@ -1147,7 +1147,9 @@ function Client:Tick()
     return
   end
 
-  self.timer:Tick()
+  if self.timer then
+    self.timer:Tick()
+  end
 end
 
 function Client:BoolVariation(featureName, defaultValue, forceSelectRealtimeToggle)
@@ -1168,6 +1170,12 @@ end
 function Client:JsonVariation(featureName, defaultValue, forceSelectRealtimeToggle)
   local variant = self:GetVariant(featureName, forceSelectRealtimeToggle)
   return variant:JsonVariation(defaultValue)
+end
+
+-- Utility method to get any type of variation based on payload type
+function Client:Variation(featureName, defaultValue, forceSelectRealtimeToggle)
+  local variant = self:GetVariant(featureName, forceSelectRealtimeToggle)
+  return variant:Variation(defaultValue)
 end
 
 return Client
