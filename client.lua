@@ -1013,6 +1013,8 @@ function Client:fetchToggles(callback)
     end
   end
 
+  self:cancelFetchTimer()
+
   self.request(url, method, headers, body, function(response)
     if self.sdkState == "error" and (response.status >= 200 and response.status < 400) then
       self.sdkState = "healthy"
