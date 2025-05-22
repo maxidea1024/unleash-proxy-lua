@@ -3,12 +3,14 @@
 local json = require("framework.3rdparty.feature-flags.dkjson")
 local util = require("framework.3rdparty.feature-flags.util")
 local logger = require("framework.3rdparty.feature-flags.logger")
+local ErrorTypes = require("framework.3rdparty.feature-flags.error-types")
+local ErrorHelper = require("framework.3rdparty.feature-flags.error-helper")
 
 local MetricsReporter = {}
 MetricsReporter.__index = MetricsReporter
 
 function MetricsReporter.New(config)
-  if not config.onError then error("`onError` is required") end
+  if not config.client then error("`client` is required") end
   if not config.appName then error("`appName` is required") end
   if not config.connectionId then error("`connectionId` is required") end
   if not config.url then error("`url` is required") end
@@ -18,7 +20,7 @@ function MetricsReporter.New(config)
 
   local self = setmetatable({}, MetricsReporter)
   self.logger = config.loggerFactory:CreateLogger("UnleashMetricsReporter")
-  self.onError = config.onError
+  self.client = config.client
   self.onSent = config.onSent or function() end
   self.disabled = config.disableMetrics or false
   self.metricsInterval = config.metricsInterval or 30
@@ -52,7 +54,7 @@ function MetricsReporter:Start()
 
     self.timerRunning = true
 
-    -- timeout으로 변경하자.
+    -- TODO timeout으로 변경하자.
 
     self.timer:Async(function()
       -- Initial delay before starting the metrics collection
@@ -129,8 +131,16 @@ function MetricsReporter:SendMetrics()
 
   local success, jsonBody = pcall(json.encode, payload)
   if not success then
-    self.logger:Error("Failed to encode JSON: " .. tostring(jsonBody))
-    self.onError(jsonBody)
+    self.client:emitError(
+      ErrorTypes.JSON_ERROR,
+      "Failed to encode metrics JSON: " .. tostring(jsonBody),
+      "MetricsReporter:SendMetrics",
+      logger.LogLevel.Error,
+      util.MergeTable({
+        payload = payload,
+        errorMessage = tostring(jsonBody)
+      }, ErrorHelper.GetJsonEncodingErrorDetail(tostring(jsonBody), "payload"))
+    )
     return
   end
 
@@ -145,11 +155,22 @@ function MetricsReporter:SendMetrics()
     else
       self.backoffs = self.backoffs + 1
 
-      self.onError({
-        type = "HttpError",
-        code = response.status,
-        message = response.body
-      })
+      self.client:emitError(
+        ErrorTypes.HTTP_ERROR,
+        "Failed to send metrics: " .. response.status,
+        "MetricsReporter:SendMetrics",
+        logger.LogLevel.Error,
+        ErrorHelper.BuildHttpErrorDetail(url, response.status, {
+          context = "metrics",
+          responseBody = response.body,
+          backoffs = self.backoffs,
+          retryInfo = {
+            currentBackoffs = self.backoffs,
+            willRetry = self.backoffs < 10,
+            nextRetryDelay = self:calculateNextRetryDelay()
+          }
+        })
+      )
     end
   end)
 end
@@ -209,6 +230,19 @@ function MetricsReporter:getPayload()
     appName = self.appName,
     instanceId = "lua-proxy-client",
   }
+end
+
+function MetricsReporter:calculateNextRetryDelay()
+  if self.backoffs >= 10 then
+    return 0 -- No more retries
+  end
+
+  -- Simple exponential backoff calculation
+  local baseDelay = 1  -- 1 second base
+  local maxDelay = 300 -- 5 minutes max
+  local delay = math.min(baseDelay * (2 ^ self.backoffs), maxDelay)
+
+  return delay
 end
 
 return MetricsReporter

@@ -110,7 +110,7 @@ local function ComputeContextHashValue(context)
   end
 end
 
-local function isTable(t)
+local function IsTable(t)
   return type(t) == "table"
 end
 
@@ -119,9 +119,9 @@ local function DeepClone(...)
 
   for i = 1, select("#", ...) do
     local t = select(i, ...)
-    if isTable(t) then
+    if IsTable(t) then
       for k, v in pairs(t) do
-        if isTable(v) and isTable(result[k]) then
+        if IsTable(v) and IsTable(result[k]) then
           result[k] = DeepClone(result[k], v)
         else
           result[k] = v
@@ -244,10 +244,10 @@ end
 
 --[[
 
-  print(path_join("C:", "folder", "/subdir\\", "file.txt"))
+  print(PathJoin("C:", "folder", "/subdir\\", "file.txt"))
     → C:\folder\subdir\file.txt (Windows)
 
-  print(path_join("/usr", "local", "\\bin"))
+  print(PathJoin("/usr", "local", "\\bin"))
     → /usr/local/bin (Unix)
 
  ]]
@@ -296,11 +296,25 @@ local function FromJson(jsonStr)
   return json.decode(jsonStr)
 end
 
+local function MergeArrays(...)
+  local result = {}
+  for i = 1, select("#", ...) do
+    local arr = select(i, ...)
+    if type(arr) == "table" then
+      for _, v in ipairs(arr) do
+        table.insert(result, v)
+      end
+    end
+  end
+  return result
+end
+
 return {
   UrlWithContextAsQuery = UrlWithContextAsQuery,
   ComputeContextHashValue = ComputeContextHashValue,
   DeepClone = DeepClone,
   ElementCountOfTable = ElementCountOfTable,
+  IsTable = IsTable,
   IsEmptyTable = IsEmptyTable,
   Uuid = Uuid,
   Iso8601UtcNow = Iso8601UtcNow,
@@ -313,4 +327,5 @@ return {
   UrlDecode = UrlDecode,
   ToJson = ToJson,
   FromJson = FromJson,
+  MergeArrays = MergeArrays,
 }

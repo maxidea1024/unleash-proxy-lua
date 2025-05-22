@@ -1,3 +1,5 @@
+local ErrorTypes = require("framework.3rdparty.feature-flags.error-types")
+
 local PREFIX = "__listener__"
 local PREFIX_LENGTH = #PREFIX
 local DEFAULT_MAX_LISTENERS = 10
@@ -44,7 +46,7 @@ function EventEmitter.New(config)
   local self = {}
 
   self.logger = config.loggerFactory:CreateLogger("UnleashEventEmitter")
-  self.onError = config.onError
+  self.client = config.client
   self.on = {}
   self.currentMaxListeners = DEFAULT_MAX_LISTENERS
 
@@ -62,7 +64,7 @@ function EventEmitter.New(config)
         instance.on = nil
       end
       instance.logger = nil
-      instance.onError = nil
+      instance.client = nil
     end
   })
 end
@@ -96,7 +98,13 @@ end
 
 function EventEmitter:AddListener(event, listener)
   if type(listener) ~= "function" then
-    self.logger:Error("Listener must be a function")
+    self.client:emitError(
+      ErrorTypes.INVALID_ARGUMENT,
+      "Listener must be a function",
+      "EventEmitter:AddListener",
+      nil, -- use default log level
+      { providedType = type(listener), event = tostring(event) }
+    )
     return function() end
   end
 
@@ -131,7 +139,13 @@ end
 
 function EventEmitter:OnWeak(event, listener)
   if type(listener) ~= "function" then
-    self.logger:Error("Listener must be a function")
+    self.client:emitError(
+      ErrorTypes.INVALID_ARGUMENT,
+      "Listener must be a function",
+      "EventEmitter:OnWeak",
+      nil, -- use default log level
+      { providedType = type(listener), event = tostring(event) }
+    )
     return function() end
   end
 
@@ -160,7 +174,13 @@ end
 
 function EventEmitter:Once(event, listener)
   if type(listener) ~= "function" then
-    self.logger:Error("Listener must be a function")
+    self.client:emitError(
+      ErrorTypes.INVALID_ARGUMENT,
+      "Listener must be a function",
+      "EventEmitter:Once",
+      nil, -- use default log level
+      { providedType = type(listener), event = tostring(event) }
+    )
     return function() end
   end
 
@@ -211,21 +231,25 @@ function EventEmitter:Emit(event, ...)
       listeners[i] = eventTable[i]
     end
 
-    for _, listener in ipairs(listeners) do
+    for i, listener in ipairs(listeners) do
       status, error = pcall(function()
         listener(unpack(args))
       end)
 
       if not status then
-        self.logger:Error(eventName .. " emit error: " .. tostring(error))
-
-        if self.onError then
-          self.onError({
-            type = "EventEmitterCallbackError",
-            message = tostring(error),
-            event = eventName
-          })
-        end
+        self.client:emitError(
+          ErrorTypes.EVENT_EMITTER_CALLBACK_ERROR,
+          "Event listener callback failed: " .. tostring(error),
+          "EventEmitter:Emit",
+          nil, -- use default log level
+          {
+            event = eventName,
+            listenerIndex = i,
+            totalListeners = #listeners,
+            argCount = #args,
+            listenerType = "normal"
+          }
+        )
       end
     end
   end
@@ -252,15 +276,19 @@ function EventEmitter:Emit(event, ...)
         end)
 
         if not status then
-          self.logger:Error(eventName .. " weak emit error: " .. tostring(error))
-
-          if self.onError then
-            self.onError({
-              type = "EventEmitterCallbackError",
-              message = tostring(error),
-              event = eventName
-            })
-          end
+          self.client:emitError(
+            ErrorTypes.EVENT_EMITTER_CALLBACK_ERROR,
+            "Weak event listener callback failed: " .. tostring(error),
+            "EventEmitter:Emit",
+            nil, -- use default log level
+            {
+              event = eventName,
+              listenerIndex = i,
+              totalListeners = count,
+              argCount = #args,
+              listenerType = "weak"
+            }
+          )
         end
       end
     end
@@ -277,21 +305,25 @@ function EventEmitter:Emit(event, ...)
 
     self.on[eventPrefix] = nil
 
-    for _, listener in ipairs(listeners) do
+    for i, listener in ipairs(listeners) do
       status, error = pcall(function()
         listener(unpack(args))
       end)
 
       if not status then
-        self.logger:Error(eventName .. " once emit error: " .. tostring(error))
-
-        if self.onError then
-          self.onError({
-            type = "EventEmitterCallbackError",
-            message = tostring(error),
-            event = eventName
-          })
-        end
+        self.client:emitError(
+          ErrorTypes.EVENT_EMITTER_CALLBACK_ERROR,
+          "Once event listener callback failed: " .. tostring(error),
+          "EventEmitter:Emit",
+          nil, -- use default log level
+          {
+            event = eventName,
+            listenerIndex = i,
+            totalListeners = #listeners,
+            argCount = #args,
+            listenerType = "once"
+          }
+        )
       end
     end
   end
@@ -391,7 +423,13 @@ end
 
 function EventEmitter:RemoveListener(event, listener)
   if not listener then
-    self.logger:Error("listener is nil")
+    self.client:emitError(
+      ErrorTypes.INVALID_ARGUMENT,
+      "Listener cannot be nil",
+      "EventEmitter:RemoveListener",
+      nil,   -- use default log level
+      { event = tostring(event) }
+    )
     return self
   end
 
@@ -435,7 +473,13 @@ function EventEmitter:SetMaxListeners(n)
   if type(n) == "number" and n >= 0 then
     self.currentMaxListeners = n
   else
-    self.logger:Error("MaxListeners must be a non-negative number")
+    self.client:emitError(
+      ErrorTypes.INVALID_ARGUMENT,
+      "MaxListeners must be a non-negative number",
+      "EventEmitter:SetMaxListeners",
+      nil, -- use default log level
+      { providedValue = tostring(n), providedType = type(n) }
+    )
   end
   return self
 end

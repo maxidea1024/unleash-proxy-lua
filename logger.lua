@@ -119,7 +119,30 @@ end
 
 function Logger:Log(level, message, ...)
   if not self:IsEnabled(level) then return end
-  local formatted = string.format(message, ...)
+
+  local formatted
+  local argCount = select("#", ...)
+
+  if argCount == 0 then
+    -- No format arguments, use message as-is to prevent format string vulnerabilities
+    formatted = tostring(message)
+  else
+    -- Format arguments provided, use string.format safely
+    local success, result = pcall(string.format, tostring(message), ...)
+    if success then
+      formatted = result
+    else
+      -- If formatting fails, escape % characters and append arguments
+      local safeMessage = tostring(message):gsub("%%", "%%%%")
+      local args = {...}
+      local argStrings = {}
+      for i = 1, argCount do
+        table.insert(argStrings, tostring(args[i]))
+      end
+      formatted = safeMessage .. " [Args: " .. table.concat(argStrings, ", ") .. "]"
+    end
+  end
+
   local time = getTime()
   for _, sink in ipairs(self.sinks) do
     sink:Write(time, level, self.category, formatted)

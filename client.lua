@@ -1,4 +1,4 @@
--- TODO emit(Events.ERROR, ...) 처리시에 오류 로깅 개선(stacktrace 가 안이쁘게 출력되고 있음.)
+-- Error handling has been improved to use emitError() for consistent error reporting with proper logging and stack traces
 
 local Json = require("framework.3rdparty.feature-flags.dkjson")
 local Timer = require("framework.3rdparty.feature-flags.timer")
@@ -8,7 +8,9 @@ local EventEmitter = require("framework.3rdparty.feature-flags.event-emitter")
 local Util = require("framework.3rdparty.feature-flags.util")
 local Logger = require("framework.3rdparty.feature-flags.logger")
 local Events = require("framework.3rdparty.feature-flags.events")
+local ErrorTypes = require("framework.3rdparty.feature-flags.error-types")
 local VariantProxy = require("framework.3rdparty.feature-flags.variant-proxy")
+local ErrorHelper = require("framework.3rdparty.feature-flags.error-helper")
 local SdkVersion = require("framework.3rdparty.feature-flags.sdk-version")
 
 local DEFINED_FIELDS = {
@@ -33,6 +35,7 @@ local DEFAULT_DISABLED_VARIANT = {
   name = "disabled",
   enabled = false,
   feature_enabled = false,
+  payload = nil,
 }
 
 local TOGGLES_KEY = "toggles"
@@ -114,6 +117,7 @@ function Client.New(config)
   self.realtimeToggleMap = convertToggleArrayToMap(config.bootstrap or {})
   self.useExplicitSyncMode = config.useExplicitSyncMode or false
   self.synchronizedToggleMap = Util.DeepClone(self.realtimeToggleMap)
+  self.lastSynchronizedETag = nil
 
   self.context = {
     -- static context
@@ -148,11 +152,11 @@ function Client.New(config)
   self.started = false
   self.bootstrap = config.bootstrap
   self.bootstrapOverride = config.bootstrapOverride ~= false
-  self.hasPreviousStates = false
 
+  -- Create EventEmitter with client reference for error handling
   self.eventEmitter = EventEmitter.New({
     loggerFactory = self.loggerFactory,
-    onError = function(err) self:emit(Events.ERROR, err) end,
+    client = self
   })
 
   self.timer = Timer.New(self.loggerFactory)
@@ -169,6 +173,7 @@ function Client.New(config)
 
   if not self.offline then
     self.metricsReporter = MetricsReporter.New({
+      client = self,
       connectionId = self.connectionId,
       appName = config.appName,
       url = self.url,
@@ -225,13 +230,34 @@ end
 
 function Client:IsEnabled(featureName, forceSelectRealtimeToggle)
   if not featureName or type(featureName) ~= "string" or string.len(featureName) == 0 then
-    self.logger:Error("`featureName` is required")
+    self:emitError(
+      ErrorTypes.INVALID_ARGUMENT,
+      "`featureName` is required and must be a non-empty string",
+      "IsEnabled",
+      Logger.LogLevel.Error,
+      {
+        providedType = type(featureName),
+        prevention = "Ensure feature name is a valid non-empty string.",
+        solution = "Pass a valid feature flag name as a string parameter.",
+        troubleshooting = {
+          "1. Verify featureName parameter is not nil",
+          "2. Ensure featureName is a string, not number or other type",
+          "3. Check featureName is not an empty string",
+          "4. Review feature flag naming conventions"
+        }
+      }
+    )
     return false
   end
 
   local toggleMap = self:selectToggleMap(forceSelectRealtimeToggle)
-
   local toggle = toggleMap[featureName]
+
+  -- Add debug log when toggle is not found
+  if not toggle and self.logger:IsEnabled(Logger.LogLevel.Debug) then
+    self.logger:Debug("Feature flag `%s` not found in toggle map", featureName)
+  end
+
   local enabled = (toggle and toggle.enabled) or false
 
   if self.metricsReporter then
@@ -300,27 +326,6 @@ function Client:GetVariant(featureName, forceSelectRealtimeToggle)
   return VariantProxy.New(self, featureName, variant)
 end
 
--- Helper function to safely call user callbacks
-function Client:callWithGuard(callback, ...)
-  -- FIXME callback이 지정안된 경우는 오류로 취급해야하지 않을까?
-  if not callback or type(callback) ~= "function" then
-    return
-  end
-
-  local success, result = pcall(callback, ...)
-  if not success then
-    local errorMsg = tostring(result)
-
-    self.logger:Error("Error in user callback: %s", errorMsg)
-
-    self:emit(Events.ERROR, {
-      type = "CallbackError",
-      message = errorMsg
-    })
-  end
-  return success, result
-end
-
 function Client:UpdateToggles(callback)
   if self.offline then
     self:callWithGuard(callback)
@@ -384,10 +389,54 @@ function Client:UpdateContext(context, callback)
     return
   end
 
+  if not context or type(context) ~= "table" then
+    self:emitError(
+      ErrorTypes.INVALID_ARGUMENT,
+      "`context` must be a table",
+      "UpdateContext",
+      Logger.LogLevel.Warning,
+      {
+        providedType = type(context),
+        prevention = "Ensure context parameter is a valid table with proper structure.",
+        solution = "Pass a valid table containing context fields like userId, sessionId, etc.",
+        troubleshooting = {
+          "1. Verify context parameter is not nil",
+          "2. Ensure context is a table, not string or other type",
+          "3. Check context structure matches expected format",
+          "4. Review context creation logic"
+        }
+      }
+    )
+    self:callWithGuard(callback)
+    return
+  end
+
+  local staticFieldsFound = {}
   for _, field in ipairs(STATIC_CONTEXT_FIELDS) do
     if context[field] then
+      table.insert(staticFieldsFound, field)
       self.logger:Warn("`%s` is a static field name. It can't be updated with UpdateContext.", field)
     end
+  end
+
+  if #staticFieldsFound > 0 then
+    self:emitError(
+      ErrorTypes.STATIC_FIELD_UPDATE_ATTEMPT,
+      "Attempted to update static context fields",
+      "UpdateContext",
+      Logger.LogLevel.Warning,
+      {
+        staticFields = staticFieldsFound,
+        prevention = "Avoid updating static context fields after client initialization.",
+        solution = "Remove static fields from context update or reinitialize client with new static values.",
+        troubleshooting = {
+          "1. Review which fields are static: " .. table.concat(STATIC_CONTEXT_FIELDS, ", "),
+          "2. Use only mutable context fields in UpdateContext",
+          "3. Set static fields during client initialization",
+          "4. Consider creating a new client instance if static fields need to change"
+        }
+      }
+    )
   end
 
   local staticContext = {
@@ -397,7 +446,7 @@ function Client:UpdateContext(context, callback)
   }
 
   -- TODO If there are no changes in the context, return
-  -- context 비교 루틴을 하나 만들어서 처리하는게 좋을듯.
+  -- It would be good to create a context comparison routine to handle this.
 
   self.context = Util.DeepClone(staticContext, context)
 
@@ -410,6 +459,10 @@ end
 
 function Client:GetContext()
   return Util.DeepClone(self.context)
+end
+
+function Client:SetContextFields(fields, callback)
+  -- TODO
 end
 
 function Client:SetContextField(field, value, callback)
@@ -519,12 +572,9 @@ function Client:init(callback)
   end)
 end
 
--- TODO callback 인자로 error를 전달해주는게 좋을듯
 function Client:Start(callback)
   if self.started then
-    -- TODO error 이벤트를 발생시켜줘야하나?
-
-    self.logger:Error("Client has already started, call Stop() before restarting.")
+    self.logger:Warn("Client has already started, call Stop() before restarting.")
     self:callWithGuard(callback)
     return
   end
@@ -544,23 +594,45 @@ function Client:Start(callback)
     startInfo.refreshInterval = string.format("%.2f sec", self.refreshInterval)
   end
 
-  self.logger:Info("Starting client: %s", Json.encode(startInfo))
+  -- Safely encode startInfo for logging
+  local success, jsonStartInfo = pcall(Json.encode, startInfo)
+  if success then
+    self.logger:Info("Starting client: %s", jsonStartInfo)
+  else
+    self.logger:Info("Starting client: [JSON encoding failed: %s]", tostring(jsonStartInfo))
+  end
 
   self.started = true
 
   -- initialize asynchronously with a callback
   self:init(function(err)
     if err then
-      self.logger:Error(tostring(err))
-
       self.sdkState = "error"
-      self:emit(Events.ERROR, err)
-      self.lastError = err
+
+      -- Use emitError for consistent error handling
+      local errorData = self:emitError(
+        ErrorTypes.UNKNOWN_ERROR,
+        "Client initialization failed: " .. tostring(err),
+        "Start",
+        Logger.LogLevel.Error,
+        {
+          originalError = err,
+          prevention = "Ensure proper client configuration and network connectivity.",
+          solution = "Check client configuration parameters and verify network access to the service.",
+          troubleshooting = {
+            "1. Verify all required configuration parameters are provided",
+            "2. Check network connectivity to the service endpoint",
+            "3. Ensure API key is valid and has proper permissions",
+            "4. Review client initialization logs for specific error details"
+          }
+        }
+      )
+
+      self.lastError = errorData
     end
 
     if self.offline then
       self:setReady()
-
       self:callWithGuard(callback)
 
       self.logger:Info("Client is started.")
@@ -569,7 +641,6 @@ function Client:Start(callback)
         if self.metricsReporter then
           self.metricsReporter:Start()
         end
-
         self:callWithGuard(callback)
 
         self.logger:Info("Client is started.")
@@ -578,67 +649,56 @@ function Client:Start(callback)
   end)
 end
 
-function Client:handleErrorCases(url, statusCode)
-  if statusCode == 401 or     -- unauthorized
-      statusCode == 403 then  -- forbidden
-    return self:handleConfigurationError(url, statusCode)
-  elseif statusCode == 404 or -- not found
-      statusCode == 429 or    -- too many request
-      statusCode == 500 or    -- internal server error
-      statusCode == 502 or    -- bad gate way
-      statusCode == 503 or    -- service unavailable
-      statusCode == 504 then  -- gateway timeout
-    return self:handleRecoverableError(url, statusCode)
-  else
-    return self.refreshInterval
-  end
-end
-
-function Client:handleConfigurationError(url, statusCode)
-  self.failures = self.failures + 1
-
-  local errorMsg = url .. " responded " .. statusCode ..
-      " which means your API key is not allowed to connect. Stopping refresh of toggles"
-
-  self.logger:Error("No more fetches will be performed. Please check that the token for API calls is correct!")
-
-  self:emit(Events.ERROR, {
-    type = "ConfigurationError",
-    message = errorMsg,
-    code = statusCode,
+function Client:handleHttpErrorCases(url, statusCode, responseBody)
+  local nextFetchDelay = self:backoff()
+  local errorType = ErrorTypes.UNKNOWN_ERROR
+  local errorMsg = "Unknown error"
+  local detail = ErrorHelper.BuildHttpErrorDetail(url, statusCode, {
+    context = "feature-flags",
+    nextFetchDelay = nextFetchDelay,
+    failures = self.failures,
+    responseBody = responseBody,
   })
 
-  return 0 -- stop fetching
-end
-
-function Client:handleRecoverableError(url, statusCode)
-  local nextFetchDelay = self:backoff()
-  local errorType, errorMsg
-
-  if statusCode == 429 then -- too many request
-    errorType = "RateLimitError"
-    errorMsg = url .. " responded " .. statusCode ..
-        " which means you are being rate limited. Stopping refresh of toggles for " .. nextFetchDelay .. " seconds"
-  elseif statusCode == 404 then -- not found
-    errorType = "NotFoundError"
-    errorMsg = url .. " responded " .. statusCode ..
-        " which means the resource was not found. Stopping refresh of toggles for " .. nextFetchDelay .. " seconds"
-  elseif statusCode == 500 or -- internal server error
-      statusCode == 502 or    -- bad gate way
-      statusCode == 503 or    -- service unavailable
-      statusCode == 504 then  -- gateway timeout
-    errorType = "ServerError"
-    errorMsg = url .. " responded " .. statusCode ..
+  if statusCode == 401 then
+    errorType = ErrorTypes.AUTHENTICATION_ERROR
+    errorMsg = "Authentication required. Please check your API key."
+    nextFetchDelay = 0 -- Don't retry on auth errors
+  elseif statusCode == 403 then
+    errorType = ErrorTypes.AUTHORIZATION_ERROR
+    errorMsg = "You don't have access to this resource. Please check your API key and permissions."
+    nextFetchDelay = 0 -- Don't retry on auth errors
+  elseif statusCode == 404 then
+    errorType = ErrorTypes.NOT_FOUND_ERROR
+    errorMsg = "Resource not found: " .. url
+    -- nextFetchDelay = 0 -- Don't retry on not found errors
+  elseif statusCode == 429 then
+    errorType = ErrorTypes.RATE_LIMIT_ERROR
+    errorMsg = "Rate limit exceeded. Retrying in " .. nextFetchDelay .. " seconds."
+  elseif statusCode >= 500 then
+    errorType = ErrorTypes.SERVER_ERROR
+    errorMsg = "Server error with status code " .. statusCode ..
         " which means the server is having issues. Stopping refresh of toggles for " .. nextFetchDelay .. " seconds"
   end
 
-  self.logger:Error(errorMsg)
+  -- Add retry information for recoverable errors
+  if nextFetchDelay > 0 then
+    detail.retryInfo = {
+      currentFailures = self.failures,
+      willRetry = true,
+      nextRetryDelay = nextFetchDelay
+    }
+  else
+    detail.retryInfo = {
+      currentFailures = self.failures,
+      willRetry = false,
+      nextRetryDelay = 0
+    }
+  end
 
-  self:emit(Events.ERROR, {
-    type = errorType,
-    message = errorMsg,
-    code = statusCode,
-  })
+  local error = self:emitError(errorType, errorMsg, "handleHttpErrorCases", Logger.LogLevel.Error, detail)
+  self.sdkState = "error"
+  self.lastError = error
 
   return nextFetchDelay
 end
@@ -679,6 +739,8 @@ function Client:timedFetch(interval)
   if interval > 0 then
     self.logger:Debug("Schedule a request to fetch toggles after %.2f seconds.", interval)
 
+    self.logger:Debug(debug.traceback())
+
     self.fetchTimer = self.timer:Timeout(interval, function()
       self:fetchToggles(function(err) end)
     end)
@@ -694,8 +756,7 @@ function Client:cancelFetchTimer()
   end
 end
 
--- TODO apply callback
-function Client:Stop(callback)
+function Client:Stop()
   if self.offline then
     return
   end
@@ -721,18 +782,10 @@ function Client:Stop(callback)
 end
 
 function Client:IsReady()
-  if self.offline then
-    return true
-  end
-
-  return self.readyEventEmitted
+  return self.offline or self.readyEventEmitted
 end
 
 function Client:GetError()
-  if self.offline then
-    return nil
-  end
-
   return (self.sdkState == 'error' and self.lastError) or nil
 end
 
@@ -801,7 +854,10 @@ function Client:storeToggles(toggles, callback)
 
   self.realtimeToggleMap = newToggleMap
 
-  self:emit(Events.UPDATE, newToggleArray)
+  if not self.useExplicitSyncMode then
+    self:emit(Events.UPDATE, newToggleArray)
+  end
+
   self.storage:Store(TOGGLES_KEY, newToggleArray, callback)
 
   -- Detects disabled flags
@@ -907,8 +963,38 @@ end
 function Client:fetchToggles(callback)
   local isPOST = self.usePOSTrequests
   local url = isPOST and self.url or Util.UrlWithContextAsQuery(self.url, self.context)
-  local body = isPOST and Json.encode({ context = self.context }) or nil
+  local body = nil
   local method = isPOST and "POST" or "GET"
+
+  -- Safely encode JSON for POST requests
+  if isPOST then
+    local success, jsonBody = pcall(Json.encode, { context = self.context })
+    if not success then
+      local jsonErrorDetail = ErrorHelper.GetJsonEncodingErrorDetail(tostring(jsonBody), "context")
+      local detail = {
+        contextPreview = ErrorHelper.GetTableKeys(self.context),
+        errorMessage = tostring(jsonBody),
+        prevention = jsonErrorDetail.prevention,
+        solution = jsonErrorDetail.solution,
+        troubleshooting = jsonErrorDetail.troubleshooting
+      }
+
+      local error = self:emitError(
+        ErrorTypes.JSON_ERROR,
+        "Failed to encode request JSON: " .. tostring(jsonBody),
+        "fetchToggles",
+        Logger.LogLevel.Error,
+        detail
+      )
+
+      self.sdkState = "error"
+      self.lastError = error
+
+      self:callWithGuard(callback, error)
+      return -- stop fetching
+    end
+    body = jsonBody
+  end
 
   local headers = self:getHeaders()
 
@@ -918,7 +1004,13 @@ function Client:fetchToggles(callback)
   end
 
   if self.logger:IsEnabled(Logger.LogLevel.Debug) then
-    self.logger:Debug("Fetch feature flags: %s", Json.encode(Util.UrlDecode(url)))
+    -- Safely encode URL for debug logging
+    local success, jsonUrl = pcall(Json.encode, Util.UrlDecode(url))
+    if success then
+      self.logger:Debug("Fetch feature flags: %s", jsonUrl)
+    else
+      self.logger:Debug("Fetch feature flags: %s [JSON encoding failed]", tostring(url))
+    end
   end
 
   self.request(url, method, headers, body, function(response)
@@ -930,21 +1022,163 @@ function Client:fetchToggles(callback)
     if response.status >= 200 and response.status < 300 then
       self.etag = Util.FindCaseInsensitive(response.headers, "ETag") or nil
 
-      local data, err = Json.decode(response.body)
-      if not data then
-        self.logger:Error("JSON decode failed: %s", tostring(err))
+      -- Use pcall to safely decode JSON and handle any exceptions
+      local success, data, err = pcall(Json.decode, response.body)
 
-        local error = {
-          type = "JsonError",
-          message = tostring(err)
+      if not success then
+        -- pcall failed, meaning Json.decode threw an exception
+        local jsonErrorDetail = ErrorHelper.GetJsonDecodingErrorDetail("exception")
+        local detail = {
+          responseBodyPreview = string.sub(response.body or "", 1, 100),
+          responseStatus = response.status,
+          url = url,
+          method = method,
+          errorMessage = tostring(data), -- data contains the error message when pcall fails
+          prevention = jsonErrorDetail.prevention,
+          solution = jsonErrorDetail.solution,
+          troubleshooting = jsonErrorDetail.troubleshooting
         }
 
+        local error = self:emitError(
+          ErrorTypes.JSON_ERROR,
+          "JSON decode exception: " .. tostring(data),
+          "fetchToggles",
+          Logger.LogLevel.Error,
+          detail
+        )
+
         self.sdkState = "error"
-        self:emit(Events.ERROR, error)
         self.lastError = error
 
         self:callWithGuard(callback, error)
+        return -- stop fetching no more
+      elseif not data then
+        -- Json.decode succeeded but returned nil (with error message)
+        local jsonErrorDetail = ErrorHelper.GetJsonDecodingErrorDetail("nil_result")
+        local detail = {
+          responseBodyPreview = string.sub(response.body or "", 1, 100),
+          responseStatus = response.status,
+          url = url,
+          method = method,
+          errorMessage = tostring(err),
+          prevention = jsonErrorDetail.prevention,
+          solution = jsonErrorDetail.solution,
+          troubleshooting = jsonErrorDetail.troubleshooting
+        }
 
+        local error = self:emitError(
+          ErrorTypes.JSON_ERROR,
+          "JSON decode failed: " .. tostring(err),
+          "fetchToggles",
+          Logger.LogLevel.Error,
+          detail
+        )
+
+        self.sdkState = "error"
+        self.lastError = error
+
+        self:callWithGuard(callback, error)
+        return -- stop fetching no more
+      end
+
+      -- Validate JSON structure
+      if type(data) ~= "table" then
+        local detail = {
+          responseBodyPreview = string.sub(response.body or "", 1, 100),
+          responseStatus = response.status,
+          url = url,
+          method = method,
+          dataType = type(data),
+          prevention = "Ensure server returns JSON object with proper structure.",
+          solution = "Verify API endpoint returns a JSON object containing toggles array.",
+          troubleshooting = {
+            "1. Check if server returns JSON object (not array or primitive)",
+            "2. Verify API endpoint implementation",
+            "3. Check for API version compatibility",
+            "4. Ensure proper Content-Type header is set",
+            "5. Test API endpoint manually to verify response structure"
+          }
+        }
+
+        local error = self:emitError(
+          ErrorTypes.JSON_ERROR,
+          "Invalid JSON structure: expected object but got " .. type(data),
+          "fetchToggles",
+          Logger.LogLevel.Error,
+          detail
+        )
+
+        self.sdkState = "error"
+        self.lastError = error
+
+        self:callWithGuard(callback, error)
+        return -- stop fetching no more
+      end
+
+      -- Validate toggles field exists and is a table
+      if data.toggles == nil then
+        local detail = {
+          responseBodyPreview = string.sub(response.body or "", 1, 100),
+          responseStatus = response.status,
+          url = url,
+          method = method,
+          availableFields = ErrorHelper.GetTableKeys(data),
+          prevention = "Ensure server returns JSON object with 'toggles' field.",
+          solution = "Verify API endpoint returns proper response structure with toggles array.",
+          troubleshooting = {
+            "1. Check if 'toggles' field exists in response",
+            "2. Verify API endpoint implementation",
+            "3. Check for API version compatibility",
+            "4. Ensure proper response schema is used",
+            "5. Test API endpoint manually to verify response structure"
+          }
+        }
+
+        local error = self:emitError(
+          ErrorTypes.JSON_ERROR,
+          "Missing 'toggles' field in response",
+          "fetchToggles",
+          Logger.LogLevel.Error,
+          detail
+        )
+
+        self.sdkState = "error"
+        self.lastError = error
+
+        self:callWithGuard(callback, error)
+        return -- stop fetching no more
+      end
+
+      if type(data.toggles) ~= "table" then
+        local detail = {
+          responseBodyPreview = string.sub(response.body or "", 1, 100),
+          responseStatus = response.status,
+          url = url,
+          method = method,
+          togglesType = type(data.toggles),
+          prevention = "Ensure server returns 'toggles' field as an array.",
+          solution = "Verify API endpoint returns toggles as an array of toggle objects.",
+          troubleshooting = {
+            "1. Check if 'toggles' field is an array/table",
+            "2. Verify API endpoint implementation",
+            "3. Check for API version compatibility",
+            "4. Ensure proper response schema is used",
+            "5. Test API endpoint manually to verify toggles structure"
+          }
+        }
+
+        local error = self:emitError(
+          ErrorTypes.JSON_ERROR,
+          "Invalid 'toggles' field type: expected table but got " .. type(data.toggles),
+          "fetchToggles",
+          Logger.LogLevel.Error,
+          detail
+        )
+
+        self.sdkState = "error"
+        self.lastError = error
+
+        self:callWithGuard(callback, error)
         return -- stop fetching no more
       end
 
@@ -986,20 +1220,10 @@ function Client:fetchToggles(callback)
         self:timedFetch(nextFetchDelay)
       end)
     else
-      if response.status <= 0 then
-        self.logger:Warn("Failed to fetch flags: " .. response.status)
-      else
-        self.logger:Warn("Failed to fetch flags: " .. response.status .. "\n\n" .. response.body)
+      local nextFetchDelay = self:handleHttpErrorCases(url, response.status, response.body)
+      if nextFetchDelay > 0 then
+        self:timedFetch(nextFetchDelay)
       end
-
-      local error = { type = "HttpError", code = response.status }
-
-      self.sdkState = "error"
-      self:emit(Events.ERROR, error)
-      self.lastError = error
-
-      local nextFetchDelay = self:handleErrorCases(url, response.status)
-      self:timedFetch(nextFetchDelay)
 
       self:callWithGuard(callback, error)
     end
@@ -1007,54 +1231,15 @@ function Client:fetchToggles(callback)
 end
 
 function Client:emit(event, ...)
-  if event == Events.ERROR and self.enableDevMode then
-    local args = { ... }
-    if #args > 0 then
-      local errorData = args[1]
-
-      -- Only add stack trace if it doesn't already exist
-      if type(errorData) == "table" and not errorData.stackTrace then
-        if debug and debug.traceback then
-          errorData.stackTrace = debug.traceback("", 2)
-
-          -- Log the error with stack trace
-          if errorData.message then
-            self.logger:Error("%s\nStack trace:\n%s", errorData.message, errorData.stackTrace)
-          end
-        end
-      end
-
-      -- Call original emit with modified error data
-      return self:_emit(event, errorData, select(2, ...))
-    end
-  end
-
-  -- For non-error events or when not in dev mode, call original emit
-  return self:_emit(event, ...)
-end
-
-function Client:_emit(event, ...)
-  if self.eventEmitter:HasListeners(event) then
-    if self.logger:IsEnabled(Logger.LogLevel.Debug) then
-      local argCount = select("#", ...)
-      if argCount > 0 then
-        local args = ...
-        self.logger:Debug("`" .. event .. "` event is emitted: %s", Json.encode(args))
-      else
-        self.logger:Debug("`" .. event .. "` event is emitted.")
-      end
-    end
-
-    self.eventEmitter:Emit(event, ...)
-  end
+  self.eventEmitter:Emit(event, ...)
 end
 
 function Client:On(event, callback)
-  self.eventEmitter:On(event, callback)
+  return self.eventEmitter:On(event, callback)
 end
 
 function Client:Once(event, callback)
-  self.eventEmitter:Once(event, callback)
+  return self.eventEmitter:Once(event, callback)
 end
 
 function Client:Off(event, callback)
@@ -1081,12 +1266,20 @@ function Client:SyncToggles(fetchNow, callback)
 
   if fetchNow then
     self:UpdateToggles(function()
-      self.synchronizedToggleMap = Util.DeepClone(self.realtimeToggleMap)
+      self:conditionalSyncToggles()
       self:callWithGuard(callback)
     end)
   else
-    self.synchronizedToggleMap = Util.DeepClone(self.realtimeToggleMap)
+    self:conditionalSyncToggles()
     self:callWithGuard(callback)
+  end
+end
+
+function Client:conditionalSyncToggles(force)
+  if force == true or self.lastSynchronizedETag ~= self.etag then
+    self.lastSynchronizedETag = self.etag
+    self.synchronizedToggleMap = Util.DeepClone(self.realtimeToggleMap)
+    self:emit(Events.UPDATE, self.synchronizedToggleMap)
   end
 end
 
@@ -1107,12 +1300,12 @@ end
 
 function Client:WatchToggleWithInitialState(featureName, callback)
   if not featureName or type(featureName) ~= "string" or string.len(featureName) == 0 then
-    self.logger:Warn("`featureName` is required")
+    error("`featureName` is required")
     return
   end
 
   if not callback or type(callback) ~= "function" then
-    self.logger:Warn("`callback` is required")
+    error("`callback` is required")
     return
   end
 
@@ -1130,7 +1323,7 @@ function Client:WatchToggleWithInitialState(featureName, callback)
   if self.readyEventEmitted then
     initialAction()
   else
-    self.logger:Debug("WatchToggleWithInitialState: waiting for ready event. feature=`%s`", featureName)
+    self.logger:Debug("WatchToggleWithInitialState: Waiting for `ready` event. feature=`%s`", featureName)
     self:Once(Events.READY, initialAction)
   end
 
@@ -1176,6 +1369,93 @@ end
 function Client:Variation(featureName, defaultValue, forceSelectRealtimeToggle)
   local variant = self:GetVariant(featureName, forceSelectRealtimeToggle)
   return variant:Variation(defaultValue)
+end
+
+function Client:createError(type, message, functionName, detail)
+  local errorData = {
+    type = type,
+    message = message,
+    functionName = functionName
+  }
+
+  if detail then
+    if Util.IsTable(detail) then
+      errorData.detail = detail
+    else
+      errorData.detail = { info = tostring(detail) }
+    end
+  end
+
+  if self.enableDevMode and debug and debug.traceback then
+    errorData.stackTrace = debug.traceback("", 2)
+  end
+
+  return errorData
+end
+
+function Client:emitError(type, message, functionName, logLevel, detail)
+  local errorData = self:createError(type, message, functionName, detail)
+
+  -- Set default log level to Warning
+  logLevel = logLevel or Logger.LogLevel.Warning
+
+  -- Output log message (include detail if available)
+  local logMessage = message
+  if detail and self.logger:IsEnabled(logLevel) then
+    if Util.IsTable(detail) then
+      local success, jsonDetail = pcall(Json.encode, detail)
+      if success then
+        logMessage = logMessage .. "\n\nDetail: " .. jsonDetail
+      else
+        logMessage = logMessage .. "\n\nDetail: [JSON encoding failed: " .. tostring(jsonDetail) .. "]"
+      end
+    else
+      logMessage = logMessage .. "\n\nDetail: " .. tostring(detail)
+    end
+  end
+
+  -- Output optional stack trace
+  if errorData.stackTrace then
+    logMessage = logMessage .. "\n" .. tostring(errorData.stackTrace)
+  end
+
+  if logLevel == Logger.LogLevel.Error then
+    self.logger:Error(logMessage)
+  elseif logLevel == Logger.LogLevel.Warning then
+    self.logger:Warn(logMessage)
+  else
+    self.logger:Debug(logMessage)
+  end
+
+  self:emit(Events.ERROR, errorData)
+
+  return errorData
+end
+
+function Client:callWithGuard(callback, ...)
+  if not callback then
+    return
+  end
+
+  local success, result = pcall(callback, ...)
+  if not success then
+    local errorMsg = tostring(result)
+    local detail = {
+      callbackType = type(callback),
+      argCount = select("#", ...),
+      callLocation = debug.getinfo(2, "Sl"),
+      prevention = "Ensure callback functions are properly implemented and handle all edge cases.",
+      solution = "Review callback implementation and add proper error handling within the callback.",
+      troubleshooting = {
+        "1. Check callback function implementation for runtime errors",
+        "2. Verify all parameters passed to callback are valid",
+        "3. Add try-catch blocks within callback if needed",
+        "4. Review callback logic for potential nil access or type errors"
+      }
+    }
+    self:emitError(ErrorTypes.CALLBACK_ERROR, errorMsg, "callWithGuard", Logger.LogLevel.Error, detail)
+  end
+  return success, result
 end
 
 return Client
