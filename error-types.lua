@@ -36,6 +36,8 @@ local ErrorTypes = {
   EVENT_EMITTER_CALLBACK_ERROR = "EventEmitterCallbackError",
   EVENT_EMITTER_WEAK_CALLBACK_ERROR = "EventEmitterWeakCallbackError",
   EVENT_EMITTER_ONCE_CALLBACK_ERROR = "EventEmitterOnceCallbackError",
+  TIMER_ERROR = "TIMER_ERROR",
 }
 
 return ErrorTypes
+

@@ -56,18 +56,18 @@ function MetricsReporter:Start()
 
     -- TODO timeout으로 변경하자.
 
-    self.timer:Async(function()
-      -- Initial delay before starting the metrics collection
-      if self.metricsIntervalInitial > 0 then
-        self.timer:Sleep(self.metricsIntervalInitial)
-      end
+    -- self.timer:Async(function()
+    --   -- Initial delay before starting the metrics collection
+    --   if self.metricsIntervalInitial > 0 then
+    --     self.timer:Sleep(self.metricsIntervalInitial)
+    --   end
 
-      -- Start the metrics collection loop
-      while self.timerRunning do
-        self:SendMetrics()
-        self.timer:Sleep(self.metricsInterval)
-      end
-    end)
+    --   -- Start the metrics collection loop
+    --   while self.timerRunning do
+    --     self:SendMetrics()
+    --     self.timer:Sleep(self.metricsInterval)
+    --   end
+    -- end)
 
     return true
   end

@@ -161,48 +161,6 @@ function Logger:Error(msg, ...) self:Log(LogLevel.Error, msg, ...) end
 
 function Logger:Fatal(msg, ...) self:Log(LogLevel.Fatal, msg, ...) end
 
-function Logger:TraceLambda(func)
-  if self:IsEnabled(LogLevel.Trace) then
-    local msg = func()
-    self:Log(LogLevel.Trace, msg)
-  end
-end
-
-function Logger:DebugLambda(func)
-  if self:IsEnabled(LogLevel.Debug) then
-    local msg = func()
-    self:Log(LogLevel.Debug, msg)
-  end
-end
-
-function Logger:InfoLambda(func)
-  if self:IsEnabled(LogLevel.Info) then
-    local msg = func()
-    self:Log(LogLevel.Info, msg)
-  end
-end
-
-function Logger:WarnLambda(func)
-  if self:IsEnabled(LogLevel.Warning) then
-    local msg = func()
-    self:Log(LogLevel.Warning, msg)
-  end
-end
-
-function Logger:ErrorLambda(func)
-  if self:IsEnabled(LogLevel.Error) then
-    local msg = func()
-    self:Log(LogLevel.Error, msg)
-  end
-end
-
-function Logger:FatalLambda(func)
-  if self:IsEnabled(LogLevel.Fatal) then
-    local msg = func()
-    self:Log(LogLevel.Fatal, msg)
-  end
-end
-
 local LoggerFactory = {}
 LoggerFactory.__index = LoggerFactory
 

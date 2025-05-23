@@ -424,6 +424,8 @@ local client = Client.New({
 - 특정 시점(예: 화면 전환, 세션 시작)에만 업데이트 적용
 - 여러 관련 기능을 동시에 업데이트해야 하는 경우
 
+**참고**: 명시적 동기화 모드로 동작중일때도 `WatchToggle`, `WatchToggleWithInitialState` 함수를 사용할 수 있습니다. 이 함수들은 Realtime toggles에 기반하여 동작합니다.
+
 ### 실시간 업데이트의 잠재적 문제점
 
 명시적 동기화 모드를 사용하지 않고 피처 플래그를 실시간으로 적용할 경우 다음과 같은 문제가 발생할 수 있습니다:
@@ -796,8 +798,6 @@ local stringValue = client:StringVariation("my-string-feature", "default")
 local jsonValue = client:JsonVariation("my-json-feature", {})
 ```
 
----
-
 # 실시간 감지
 
 # WatchToggle과 WatchToggleWithInitialState 함수 설명
@@ -945,7 +945,6 @@ end)
 `WatchToggleWithInitialState`는 컴포넌트 초기화 시 현재 상태를 즉시 반영해야 하는 경우에 특히 유용합니다. 예를 들어, UI 컴포넌트가 피처 플래그 상태에 따라 다르게 렌더링되어야 할 때 사용할 수 있습니다.
 `VariantProxy` 객체를 통해 피처 플래그의 활성화 상태뿐만 아니라 변형 이름, 변형 데이터(불리언, 숫자, 문자열, JSON) 등 다양한 정보에 접근할 수 있습니다.
 
----
 
 # 컨텍스트(Context)
 

@@ -1,13 +1,19 @@
 local Timer = {}
 Timer.__index = Timer
 
-function Timer.New(loggerFactory)
+local ErrorTypes = require("framework.3rdparty.feature-flags.error-types")
+local Logger = require("framework.3rdparty.feature-flags.logger")
+
+function Timer.New(loggerFactory, client)
   if not loggerFactory then error("`loggerFactory` is required") end
+  if not client then error("`client` is required") end
 
   local self = setmetatable({}, Timer)
   self.timers = {}
   self.co_pool = setmetatable({}, { __mode = "kv" })
-  self.logger = loggerFactory.CreateLogger("UnleashTimer")
+  self.logger = loggerFactory:CreateLogger("UnleashTimer")
+  self.nextTimerId = 1
+  self.client = client
   return self
 end
 
@@ -21,7 +27,9 @@ function Timer:insertTimer(sec, fn)
     pos = i + 1
   end
 
-  local context = { expireAt = expireAt, fn = fn }
+  local context = { id = self.nextTimerId, expireAt = expireAt, fn = fn }
+  self.nextTimerId = self.nextTimerId + 1
+
   table.insert(self.timers, pos, context)
   return context
 end
@@ -60,7 +68,8 @@ function Timer:Async(fn)
 end
 
 function Timer:Timeout(seconds, fn)
-  return self:insertTimer(seconds, fn)
+  local timer = self:insertTimer(seconds, fn)
+  return timer
 end
 
 function Timer:Sleep(seconds)
@@ -80,6 +89,10 @@ function Timer:CancelAll()
   self.timers = {}
 end
 
+function Timer:TimerCount()
+  return #self.timers
+end
+
 function Timer:Tick()
   local now = os.clock()
   while #self.timers > 0 do
@@ -89,9 +102,27 @@ function Timer:Tick()
       table.remove(self.timers, 1)
 
       if not timer.canceled then
+        self.logger:Debug("Executing timer: id=%d", timer.id)
+
         local ok, err = xpcall(timer.fn, debug.traceback)
         if not ok then
-          self.logger:error("timer error:", err)
+          self.client:emitError(
+            ErrorTypes.TIMER_ERROR,
+            "Timer execution failed: " .. tostring(err),
+            "Timer:Tick",
+            Logger.LogLevel.Error,
+            {
+              timerId = timer.id,
+              stackTrace = err,
+              prevention = "Ensure timer callbacks handle all possible error cases.",
+              solution = "Review the timer callback implementation and add proper error handling.",
+              troubleshooting = {
+                "1. Check for nil values in the timer callback",
+                "2. Ensure all required resources are available when the timer executes",
+                "3. Add pcall/xpcall within the timer callback for critical operations"
+              }
+            }
+          )
         end
       end
     else
