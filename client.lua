@@ -105,7 +105,7 @@ function Client.New(config)
   end
 
   self.offline = config.offline or false
-  if self.enableDevMode then
+  if self.offline then
     self.logger:Info("Operating in offline mode.")
   end
 
