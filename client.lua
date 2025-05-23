@@ -953,12 +953,10 @@ function Client:initialFetchToggles(callback)
 end
 
 function Client:fetchToggles(callback)
-  self.fetching = true
-  
   if self.logger:IsEnabled(Logger.LogLevel.Debug) then
     self.logger:Debug("Fetching toggles, context hash: %s", self.fetchingContextHash)
   end
-  
+
   local isPOST = self.usePOSTrequests
   local url = isPOST and self.url or Util.UrlWithContextAsQuery(self.url, self.context)
   local body = nil
@@ -1010,6 +1008,8 @@ function Client:fetchToggles(callback)
   --     self.logger:Debug("Fetch feature flags: %s [JSON encoding failed]", tostring(url))
   --   end
   -- end
+
+  self.fetching = true
 
   self.request(url, method, headers, body, function(response)
     self.fetching = false
