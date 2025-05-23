@@ -727,8 +727,8 @@ end
 
 function Client:timedFetch(interval)
   if interval > 0 then
-    self.logger:Debug("Schedule a request to fetch toggles after %.2f seconds.", interval)
-
+    self.logger:Debug("Next fetch toggles in %.2fs", interval)
+    
     self.fetchTimer = self.timer:Timeout(interval, function()
       self:fetchToggles(function(err) end)
     end)

@@ -16,12 +16,12 @@ local DEFAULT_VALUES = {
 -- Helper function to handle payload validation
 local function validatePayload(self, expectedType, defaultValue)
   if not self.rawVariant or not self.rawVariant.payload then
-    self.client.logger:Debug("No valid payload found for feature `%s`", self.featureName)
+    self.client.logger:Warn("No valid payload found for feature `%s`", self.featureName)
     return false, defaultValue
   end
 
   if self.rawVariant.payload.type ~= expectedType then
-    self.client.logger:Debug("Expected %s payload for feature `%s` but got `%s`",
+    self.client.logger:Warn("Expected `%s` payload for feature `%s` but got `%s`",
       expectedType, self.featureName, self.rawVariant.payload.type or "nil")
     return false, defaultValue
   end
@@ -169,28 +169,28 @@ function VariantProxy:GetVariation(defaultValue)
 
   if payloadType == "boolean" then
     if type(defaultValue) ~= "boolean" then
-      self.client.logger:Warn("Expected boolean default value for feature `%s`, got `%s`",
+      self.client.logger:Warn("Expected `boolean` default value for feature `%s`, got `%s`",
         self.featureName, type(defaultValue))
       defaultValue = DEFAULT_VALUES.BOOLEAN
     end
     return self:BoolVariation(defaultValue)
   elseif payloadType == "number" then
     if type(defaultValue) ~= "number" then
-      self.client.logger:Warn("Expected number default value for feature `%s`, got `%s`",
+      self.client.logger:Warn("Expected `number` default value for feature `%s`, got `%s`",
         self.featureName, type(defaultValue))
       defaultValue = DEFAULT_VALUES.NUMBER
     end
     return self:NumberVariation(defaultValue)
   elseif payloadType == "string" then
     if type(defaultValue) ~= "string" then
-      self.client.logger:Warn("Expected string default value for feature `%s`, got `%s`",
+      self.client.logger:Warn("Expected `string` default value for feature `%s`, got `%s`",
         self.featureName, type(defaultValue))
       defaultValue = DEFAULT_VALUES.STRING
     end
     return self:StringVariation(defaultValue)
   elseif payloadType == "json" then
     if type(defaultValue) ~= "table" then
-      self.client.logger:Warn("Expected table default value for feature `%s`, got `%s`",
+      self.client.logger:Warn("Expected `table` default value for feature `%s`, got `%s`",
         self.featureName, type(defaultValue))
       defaultValue = DEFAULT_VALUES.TABLE
     end
