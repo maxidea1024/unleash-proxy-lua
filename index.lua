@@ -3,6 +3,7 @@ local InMemoryStorageProvider = require("framework.3rdparty.feature-flags.storag
 local FileStorageProvider = require("framework.3rdparty.feature-flags.storage-provider-file")
 local Events = require("framework.3rdparty.feature-flags.events")
 local Logger = require("framework.3rdparty.feature-flags.logger")
+local ClientConfigBuilder = require("framework.3rdparty.feature-flags.client-config-builder")
 
 return {
   Client = Client,
@@ -10,4 +11,5 @@ return {
   FileStorageProvider = FileStorageProvider,
   Events = Events,
   Logger = Logger,
+  ClientConfigBuilder = ClientConfigBuilder
 }
