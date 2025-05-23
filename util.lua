@@ -133,13 +133,38 @@ local function DeepClone(...)
   return result
 end
 
-local function Uuid()
+local function UuidV4()
   local random = math.random
   local template = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'
   return string.gsub(template, '[xy]', function(c)
     local v = (c == 'x') and random(0, 0xf) or random(8, 0xb)
     return string.format('%x', v)
   end)
+end
+
+local function UuidV7()
+  -- random bytes
+  local value = {}
+  for i = 1, 16 do
+    value[i] = math.random(0, 255)
+  end
+
+  -- current timestamp in ms
+  local timestamp = os.time() * 1000
+
+  -- timestamp - using bit library functions instead of operators
+  value[1] = bit.band(bit.rshift(timestamp, 40), 0xFF)
+  value[2] = bit.band(bit.rshift(timestamp, 32), 0xFF)
+  value[3] = bit.band(bit.rshift(timestamp, 24), 0xFF)
+  value[4] = bit.band(bit.rshift(timestamp, 16), 0xFF)
+  value[5] = bit.band(bit.rshift(timestamp, 8), 0xFF)
+  value[6] = bit.band(timestamp, 0xFF)
+
+  -- version and variant
+  value[7] = bit.bor(bit.band(value[7], 0x0F), 0x70)
+  value[9] = bit.bor(bit.band(value[9], 0x3F), 0x80)
+
+  return binToHex(string.char(unpack(value)))
 end
 
 local ElementCountOfTable = function(t)
@@ -316,7 +341,8 @@ return {
   ElementCountOfTable = ElementCountOfTable,
   IsTable = IsTable,
   IsEmptyTable = IsEmptyTable,
-  Uuid = Uuid,
+  UuidV4 = UuidV4,
+  UuidV7 = UuidV7,
   Iso8601UtcNow = Iso8601UtcNow,
   Iso8601UtcNowWithMSec = Iso8601UtcNowWithMSec,
   CalculateHash = CalculateHash,

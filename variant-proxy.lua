@@ -1,5 +1,6 @@
 local json = require("framework.3rdparty.feature-flags.dkjson")
-local events = require("framework.3rdparty.feature-flags.events")
+local Validation = require("framework.3rdparty.feature-flags.validation")
+local ErrorTypes = require("framework.3rdparty.feature-flags.error-types")
 
 local VariantProxy = {}
 VariantProxy.__index = VariantProxy
@@ -12,93 +13,63 @@ local DEFAULT_VALUES = {
   TABLE = {}
 }
 
--- Helper function to validate type and log warning if needed
-local function validateType(client, featureName, expectedType, value, defaultValue)
-  if type(value) ~= expectedType then
-    client.logger:Warn("`defaultValue` must be a " .. expectedType)
-    return false, defaultValue
-  end
-  return true, value
-end
-
 -- Helper function to handle payload validation
 local function validatePayload(self, expectedType, defaultValue)
-  if not self.variant or not self.variant.payload then
-    self.client.logger:Debug("No valid payload found for feature '%s'", self.featureName)
+  if not self.rawVariant or not self.rawVariant.payload then
+    self.client.logger:Debug("No valid payload found for feature `%s`", self.featureName)
     return false, defaultValue
   end
 
-  if self.variant.payload.type ~= expectedType then
-    self.client.logger:Debug("Expected %s payload for feature '%s' but got '%s'",
-      expectedType, self.featureName, self.variant.payload.type or "nil")
+  if self.rawVariant.payload.type ~= expectedType then
+    self.client.logger:Debug("Expected %s payload for feature `%s` but got `%s`",
+      expectedType, self.featureName, self.rawVariant.payload.type or "nil")
     return false, defaultValue
   end
 
-  if self.variant.payload.value == nil then
-    self.client.logger:Warn("Empty %s payload for feature '%s'", expectedType, self.featureName)
+  if self.rawVariant.payload.value == nil then
+    self.client.logger:Warn("Empty %s payload for feature `%s`", expectedType, self.featureName)
     return false, defaultValue
   end
 
-  return true, self.variant.payload.value
+  return true, self.rawVariant.payload.value
 end
 
-function VariantProxy.New(client, featureName, variant)
-  if not client then
-    error("Client is required for VariantProxy")
-  end
-
-  if not featureName or type(featureName) ~= "string" then
-    client.logger:Warn("Feature name must be a non-empty string")
-    featureName = "unknown"
-  end
+function VariantProxy.New(client, featureName, rawVariant)
+  Validation.RequireValue(client, "client", "VariantProxy.New")
+  Validation.RequireString(featureName, "featureName", "VariantProxy.New")
+  Validation.RequireTable(rawVariant, "rawVariant", "VariantProxy.New")
 
   local self = setmetatable({}, VariantProxy)
   self.client = client
   self.featureName = featureName
-  self.variant = variant or {
-    name = "default",
-    enabled = false,
-    feature_enabled = false,
-    payload = nil
-  }
-
+  self.rawVariant = rawVariant
   return self
 end
 
-function VariantProxy:GetFeatureName()
+function VariantProxy:FeatureName()
   return self.featureName
 end
 
-function VariantProxy:GetVariantName()
-  return self.variant.name or "default"
+function VariantProxy:VariantName()
+  return self.rawVariant.name or "default"
 end
 
-function VariantProxy:GetVariant()
-  return self.variant
+function VariantProxy:RawVariant()
+  return self.rawVariant
 end
 
 function VariantProxy:IsEnabled(defaultValue)
-  return self.variant.feature_enabled or defaultValue or DEFAULT_VALUES.BOOLEAN
+  return self.rawVariant.feature_enabled or defaultValue or DEFAULT_VALUES.BOOLEAN
 end
 
 function VariantProxy:BoolVariation(defaultValue)
-  defaultValue = defaultValue or DEFAULT_VALUES.BOOLEAN
-  local isValid, validatedValue = validateType(self.client, self.featureName, "boolean", defaultValue,
-    DEFAULT_VALUES.BOOLEAN)
-  if not isValid then
-    return validatedValue
-  end
+  Validation.RequireBoolean(defaultValue, "defaultValue", "BoolVariation")
 
-  return self.variant.feature_enabled or defaultValue
+  return self.rawVariant.feature_enabled or defaultValue
 end
 
 function VariantProxy:NumberVariation(defaultValue)
-  defaultValue = defaultValue or DEFAULT_VALUES.NUMBER
-  local isValid, validatedValue = validateType(self.client, self.featureName, "number", defaultValue,
-    DEFAULT_VALUES.NUMBER)
-  if not isValid then
-    return validatedValue
-  end
+  Validation.RequireNumber(defaultValue, "defaultValue", "NumberVariation")
 
   local isPayloadValid, payloadValue = validatePayload(self, "number", defaultValue)
   if not isPayloadValid then
@@ -112,27 +83,29 @@ function VariantProxy:NumberVariation(defaultValue)
   if numSuccess and numValue then
     return numValue
   else
-    self.client.logger:Warn("Failed to convert value to number for feature '%s': %s",
+    self.client.logger:Warn("Failed to convert value to number for feature `%s`: %s",
       self.featureName, tostring(payloadValue))
 
-    self.client:emit(events.ERROR, {
-      type = "NumberConversionError",
-      message = "Failed to convert value to number",
-      featureName = self.featureName,
-      payload = payloadValue
-    })
+    self.client:emitError(
+      ErrorTypes.CONVERSION_ERROR,
+      "Failed to convert value to number",
+      "VariantProxy:NumberVariation",
+      nil, -- use default log level
+      {
+        featureName = self.featureName,
+        payload = payloadValue,
+        expectedType = "number",
+        prevention = "Ensure payload values are valid numbers or can be converted to numbers.",
+        solution = "Check the feature flag configuration and make sure number values are properly formatted."
+      }
+    )
 
     return defaultValue
   end
 end
 
 function VariantProxy:StringVariation(defaultValue)
-  defaultValue = defaultValue or DEFAULT_VALUES.STRING
-  local isValid, validatedValue = validateType(self.client, self.featureName, "string", defaultValue,
-    DEFAULT_VALUES.STRING)
-  if not isValid then
-    return validatedValue
-  end
+  Validation.RequireString(defaultValue, "defaultValue", "StringVariation", true) -- allow empty
 
   local isPayloadValid, payloadValue = validatePayload(self, "string", defaultValue)
   if not isPayloadValid then
@@ -142,18 +115,13 @@ function VariantProxy:StringVariation(defaultValue)
   if payloadValue ~= nil then
     return tostring(payloadValue)
   else
-    self.client.logger:Warn("Nil string value for feature '%s'", self.featureName)
+    self.client.logger:Warn("nil value for feature `%s`", self.featureName)
     return defaultValue
   end
 end
 
 function VariantProxy:JsonVariation(defaultValue)
-  defaultValue = defaultValue or DEFAULT_VALUES.TABLE
-  local isValid, validatedValue = validateType(self.client, self.featureName, "table", defaultValue, DEFAULT_VALUES
-  .TABLE)
-  if not isValid then
-    return validatedValue
-  end
+  Validation.RequireTable(defaultValue, "defaultValue", "JsonVariation")
 
   local isPayloadValid, payloadValue = validatePayload(self, "json", defaultValue)
   if not isPayloadValid then
@@ -164,21 +132,23 @@ function VariantProxy:JsonVariation(defaultValue)
     return json.decode(payloadValue)
   end)
 
-  if not success then
-    self.client.logger:Warn("Failed to decode JSON for feature '%s': %s", self.featureName, tostring(result))
+  if not success or not result then
+    self.client.logger:Warn("Failed to decode JSON for feature `%s`: %s", self.featureName, tostring(result))
 
-    self.client:emit(events.ERROR, {
-      type = "JsonDecodeError",
-      message = tostring(result),
-      featureName = self.featureName,
-      payload = payloadValue
-    })
+    self.client:emitError(
+      ErrorTypes.JSON_ERROR,
+      "Failed to decode JSON payload",
+      "VariantProxy:JsonVariation",
+      nil, -- use default log level
+      {
+        featureName = self.featureName,
+        payload = payloadValue,
+        errorMessage = tostring(result),
+        prevention = "Ensure JSON payloads are valid and properly formatted.",
+        solution = "Check the feature flag configuration and validate the JSON syntax."
+      }
+    )
 
-    return defaultValue
-  end
-
-  if not result then
-    self.client.logger:Warn("JSON decode returned nil for feature '%s'", self.featureName)
     return defaultValue
   end
 
@@ -186,28 +156,62 @@ function VariantProxy:JsonVariation(defaultValue)
 end
 
 function VariantProxy:GetPayloadType()
-  return self.variant.payload and self.variant.payload.type or "<none>"
+  return self.rawVariant.payload and self.rawVariant.payload.type or "<none>"
 end
 
 -- Convenience method to get any type of variation based on payload type
 function VariantProxy:GetVariation(defaultValue)
-  if not self.variant or not self.variant.payload then
+  if not self.rawVariant or not self.rawVariant.payload then
     return defaultValue
   end
 
-  local payloadType = self.variant.payload.type
+  local payloadType = self.rawVariant.payload.type
 
   if payloadType == "boolean" then
+    if type(defaultValue) ~= "boolean" then
+      self.client.logger:Warn("Expected boolean default value for feature `%s`, got `%s`",
+        self.featureName, type(defaultValue))
+      defaultValue = DEFAULT_VALUES.BOOLEAN
+    end
     return self:BoolVariation(defaultValue)
   elseif payloadType == "number" then
+    if type(defaultValue) ~= "number" then
+      self.client.logger:Warn("Expected number default value for feature `%s`, got `%s`",
+        self.featureName, type(defaultValue))
+      defaultValue = DEFAULT_VALUES.NUMBER
+    end
     return self:NumberVariation(defaultValue)
   elseif payloadType == "string" then
+    if type(defaultValue) ~= "string" then
+      self.client.logger:Warn("Expected string default value for feature `%s`, got `%s`",
+        self.featureName, type(defaultValue))
+      defaultValue = DEFAULT_VALUES.STRING
+    end
     return self:StringVariation(defaultValue)
   elseif payloadType == "json" then
+    if type(defaultValue) ~= "table" then
+      self.client.logger:Warn("Expected table default value for feature `%s`, got `%s`",
+        self.featureName, type(defaultValue))
+      defaultValue = DEFAULT_VALUES.TABLE
+    end
     return self:JsonVariation(defaultValue)
   else
-    self.client.logger:Warn("Unknown payload type '%s' for feature '%s'",
+    self.client.logger:Warn("Unknown payload type `%s` for feature `%s`",
       payloadType or "nil", self.featureName)
+
+    self.client:emitError(
+      ErrorTypes.INVALID_PAYLOAD_TYPE,
+      "Unknown payload type",
+      "VariantProxy:GetVariation",
+      nil,
+      {
+        featureName = self.featureName,
+        payloadType = payloadType or "nil",
+        prevention = "Use only supported payload types: boolean, number, string, json.",
+        solution = "Check the feature flag configuration and correct the payload type."
+      }
+    )
+
     return defaultValue
   end
 end
@@ -216,15 +220,33 @@ end
 VariantProxy.Cache = setmetatable({}, { __mode = "v" })
 
 -- Factory method that uses caching
-function VariantProxy.GetOrCreate(client, featureName, variant)
-  local cacheKey = featureName .. ":" .. (variant and variant.name or "default")
+function VariantProxy.GetOrCreate(client, featureName, rawVariant)
+  local cacheKey = featureName .. ":" .. (rawVariant and rawVariant.name or "default")
   local cached = VariantProxy.Cache[cacheKey]
 
-  if cached and cached.variant == variant then
-    return cached
+  if cached then
+    local isSameReference = cached.rawVariant == rawVariant
+    local isSameContent = false
+
+    if not isSameReference and rawVariant then
+      isSameContent =
+          cached.rawVariant and
+          cached.rawVariant.name == rawVariant.name and
+          cached.rawVariant.feature_enabled == rawVariant.feature_enabled and
+          (
+            (not cached.rawVariant.payload and not rawVariant.payload) or
+            (cached.rawVariant.payload and rawVariant.payload and
+              cached.rawVariant.payload.type == rawVariant.payload.type and
+              cached.rawVariant.payload.value == rawVariant.payload.value)
+          )
+    end
+
+    if isSameReference or isSameContent then
+      return cached
+    end
   end
 
-  local proxy = VariantProxy.New(client, featureName, variant)
+  local proxy = VariantProxy.New(client, featureName, rawVariant)
   VariantProxy.Cache[cacheKey] = proxy
   return proxy
 end

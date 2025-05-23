@@ -1,5 +1,3 @@
--- Error handling has been improved to use emitError() for consistent error reporting with proper logging and stack traces
-
 local Json = require("framework.3rdparty.feature-flags.dkjson")
 local Timer = require("framework.3rdparty.feature-flags.timer")
 local MetricsReporter = require("framework.3rdparty.feature-flags.metrics-reporter")
@@ -12,6 +10,7 @@ local ErrorTypes = require("framework.3rdparty.feature-flags.error-types")
 local VariantProxy = require("framework.3rdparty.feature-flags.variant-proxy")
 local ErrorHelper = require("framework.3rdparty.feature-flags.error-helper")
 local SdkVersion = require("framework.3rdparty.feature-flags.sdk-version")
+local Validation = require("framework.3rdparty.feature-flags.validation")
 
 local DEFINED_FIELDS = {
   "userId",
@@ -48,7 +47,7 @@ local SESSION_ID_KEY = "sessionId"
 local function createImpressionEvent(context, enabled, featureName, eventType, impressionData, variantName)
   local event = {
     eventType = eventType,
-    eventId = Util.Uuid(),
+    eventId = Util.UuidV7(),
     context = context,
     enabled = enabled,
     featureName = featureName,
@@ -84,11 +83,15 @@ end
 -- Client implementation
 ------------------------------------------------------------------
 
+-- logger 개선:
+--  sinker만 외부에서 추가하는 형태로 하는게 좋을듯함.
+--  현재는 Logger Factory를 외부에서 지정하는 형태임.
+
 local Client = {}
 Client.__index = Client
 
 function Client.New(config)
-  if not config or type(config) ~= "table" then error("`config` is required") end
+  Validation.RequireTable(config, "config", "Client.New")
 
   local self = setmetatable({}, Client)
 
@@ -102,17 +105,21 @@ function Client.New(config)
   end
 
   self.offline = config.offline or false
+  if self.enableDevMode then
+    self.logger:Info("Operating in offline mode.")
+  end
 
   -- Validate required fields
-  if not config.appName then error("`appName` is required") end
+  Validation.RequireField(config, "appName", "config", "Client.New")
+
   if not self.offline then
-    if not config.url then error("`url` is required") end
-    if not config.request then error("`request` is required") end
-    if not config.clientKey then error("`clientKey` is required") end
+    Validation.RequireField(config, "url", "config", "Client.New")
+    Validation.RequireField(config, "request", "config", "Client.New")
+    Validation.RequireField(config, "clientKey", "config", "Client.New")
   end
 
   self.sdkName = SdkVersion
-  self.connectionId = Util.Uuid()
+  self.connectionId = Util.UuidV7()
 
   self.realtimeToggleMap = convertToggleArrayToMap(config.bootstrap or {})
   self.useExplicitSyncMode = config.useExplicitSyncMode or false
@@ -242,6 +249,9 @@ function Client:init(callback)
 end
 
 function Client:Start(callback)
+  -- CHECKME
+  -- offline 모드에서도 로컬에 캐싱된 데이터를 가져오는것 까지해야한다면,
+  -- 여기서 리턴하면 안됨.
   if self.offline then
     self:callWithGuard(callback)
     return
@@ -281,8 +291,6 @@ function Client:Start(callback)
   -- initialize asynchronously with a callback
   self:init(function(err)
     if err then
-      self.sdkState = "error"
-
       -- Use emitError for consistent error handling
       local errorData = self:emitError(
         ErrorTypes.UNKNOWN_ERROR,
@@ -302,6 +310,7 @@ function Client:Start(callback)
         }
       )
 
+      self.sdkState = "error"
       self.lastError = errorData
     end
 
@@ -315,6 +324,7 @@ function Client:Start(callback)
         if self.metricsReporter then
           self.metricsReporter:Start()
         end
+
         self:callWithGuard(callback)
 
         self.logger:Info("Client is started.")
@@ -356,27 +366,8 @@ function Client:GetAllEnabledToggles()
 end
 
 function Client:IsEnabled(featureName, forceSelectRealtimeToggle)
-  -- TODO 에러로 취급하는게 맞을듯한데?
-  if not featureName or type(featureName) ~= "string" or #featureName == 0 then
-    self:emitError(
-      ErrorTypes.INVALID_ARGUMENT,
-      "`featureName` is required and must be a non-empty string",
-      "IsEnabled",
-      Logger.LogLevel.Error,
-      {
-        providedType = type(featureName),
-        prevention = "Ensure feature name is a valid non-empty string.",
-        solution = "Pass a valid feature flag name as a string parameter.",
-        troubleshooting = {
-          "1. Verify featureName parameter is not nil",
-          "2. Ensure featureName is a string, not number or other type",
-          "3. Check featureName is not an empty string",
-          "4. Review feature flag naming conventions"
-        }
-      }
-    )
-    return false
-  end
+  -- 직접 유효성 검사 호출 (pcall 없이)
+  Validation.RequireString(featureName, "featureName", "IsEnabled")
 
   local toggleMap = self:selectToggleMap(forceSelectRealtimeToggle)
   local toggle = toggleMap[featureName]
@@ -409,11 +400,7 @@ function Client:IsEnabled(featureName, forceSelectRealtimeToggle)
 end
 
 function Client:GetRawVariant(featureName, forceSelectRealtimeToggle)
-  -- TODO 에러로 취급하는게 맞을듯한데?
-  if not featureName or type(featureName) ~= "string" or #featureName == 0 then
-    self.logger:Warn("`featureName` is required")
-    return DEFAULT_DISABLED_VARIANT
-  end
+  Validation.RequireString(featureName, "featureName", "GetRawVariant")
 
   local toggleMap = self:selectToggleMap(forceSelectRealtimeToggle)
 
@@ -451,8 +438,8 @@ function Client:GetRawVariant(featureName, forceSelectRealtimeToggle)
 end
 
 function Client:GetVariant(featureName, forceSelectRealtimeToggle)
-  local variant = self:GetRawVariant(featureName, forceSelectRealtimeToggle)
-  return VariantProxy.New(self, featureName, variant)
+  local rawVariant = self:GetRawVariant(featureName, forceSelectRealtimeToggle)
+  return VariantProxy.GetOrCreate(self, featureName, rawVariant)
 end
 
 function Client:UpdateToggles(callback)
@@ -594,6 +581,7 @@ function Client:SetContextFields(fields, callback)
   -- TODO
 end
 
+-- context 변경까지는 해주는게 맞나?
 function Client:SetContextField(field, value, callback)
   if self.offline then
     self:callWithGuard(callback)
@@ -749,8 +737,6 @@ end
 
 function Client:cancelFetchTimer()
   if self.fetchTimer then
-    self.logger:Debug("Cancel fetch timer.");
-
     self.timer:Cancel(self.fetchTimer)
     self.fetchTimer = nil
   end
@@ -763,8 +749,6 @@ function Client:Stop()
     self.logger:Warn("Client is not stated.")
     return
   end
-
-  self:cancelFetchTimer()
 
   if self.metricsReporter then
     self.metricsReporter:Stop()
@@ -1000,21 +984,17 @@ function Client:fetchToggles(callback)
     headers["Content-Length"] = tostring(body and #body or 0)
   end
 
-  if self.logger:IsEnabled(Logger.LogLevel.Debug) then
-    -- Safely encode URL for debug logging
-    local success, jsonUrl = pcall(Json.encode, Util.UrlDecode(url))
-    if success then
-      self.logger:Debug("Fetch feature flags: %s", jsonUrl)
-    else
-      self.logger:Debug("Fetch feature flags: %s [JSON encoding failed]", tostring(url))
-    end
-  end
-
-  self:cancelFetchTimer()
+  -- if self.logger:IsEnabled(Logger.LogLevel.Debug) then
+  --   -- Safely encode URL for debug logging
+  --   local success, jsonUrl = pcall(Json.encode, Util.UrlDecode(url))
+  --   if success then
+  --     self.logger:Debug("Fetch feature flags: %s", jsonUrl)
+  --   else
+  --     self.logger:Debug("Fetch feature flags: %s [JSON encoding failed]", tostring(url))
+  --   end
+  -- end
 
   self.request(url, method, headers, body, function(response)
-    -- 스레딩 이슈가 있나?
-
     if self.sdkState == "error" and (response.status >= 200 and response.status < 400) then
       self.sdkState = "healthy"
       self:emit(Events.RECOVERED)
@@ -1292,15 +1272,8 @@ function Client:WatchToggle(featureName, callback)
     return function() end
   end
 
-  if not featureName or type(featureName) ~= "string" or #featureName == 0 then
-    self.logger:Warn("`featureName` is required")
-    return
-  end
-
-  if not callback or type(callback) ~= "function" then
-    self.logger:Warn("`callback` is required")
-    return
-  end
+  Validation.RequireString(featureName, "featureName", "WatchToggle")
+  Validation.RequireFunction(callback, "callback", "WatchToggle")
 
   local eventName = "update:" .. featureName
   return self.eventEmitter:On(eventName, callback)
@@ -1311,13 +1284,8 @@ function Client:WatchToggleWithInitialState(featureName, callback)
     return function() end
   end
 
-  if not featureName or type(featureName) ~= "string" or #featureName == 0 then
-    error("`featureName` is required")
-  end
-
-  if not callback or type(callback) ~= "function" then
-    error("`callback` is required")
-  end
+  Validation.RequireString(featureName, "featureName", "WatchToggleWithInitialState")
+  Validation.RequireFunction(callback, "callback", "WatchToggleWithInitialState")
 
   local eventName = "update:" .. featureName
 
@@ -1325,7 +1293,7 @@ function Client:WatchToggleWithInitialState(featureName, callback)
   local off = self.eventEmitter:On(eventName, callback)
 
   local initialAction = function()
-    self.eventEmitter:Emit(eventName, self:GetVariant(featureName, true)) -- select realtime toggle
+    self.eventEmitter:Emit(eventName, self:GetVariant(featureName, true)) -- force select realtime toggle
   end
 
   -- If READY event has already been emitted, execute immediately
@@ -1343,6 +1311,8 @@ end
 function Client:UnwatchToggle(featureName, callback)
   if self.offline then return end
 
+  Validation.RequireString(featureName, "featureName", "UnwatchToggle")
+
   local eventName = "update:" .. featureName
   self.eventEmitter:Off(eventName, callback)
 end
@@ -1353,32 +1323,25 @@ function Client:Tick()
   end
 end
 
--- TODO defaultValue를 생략할수 없음. 생략하면 오류로 처리해야함!
-
 function Client:BoolVariation(featureName, defaultValue, forceSelectRealtimeToggle)
-  local variant = self:GetVariant(featureName, forceSelectRealtimeToggle)
-  return variant:BoolVariation(defaultValue)
+  return self:GetVariant(featureName, forceSelectRealtimeToggle):BoolVariation(defaultValue)
 end
 
 function Client:NumberVariation(featureName, defaultValue, forceSelectRealtimeToggle)
-  local variant = self:GetVariant(featureName, forceSelectRealtimeToggle)
-  return variant:NumberVariation(defaultValue)
+  return self:GetVariant(featureName, forceSelectRealtimeToggle):NumberVariation(defaultValue)
 end
 
 function Client:StringVariation(featureName, defaultValue, forceSelectRealtimeToggle)
-  local variant = self:GetVariant(featureName, forceSelectRealtimeToggle)
-  return variant:StringVariation(defaultValue)
+  return self:GetVariant(featureName, forceSelectRealtimeToggle):StringVariation(defaultValue)
 end
 
 function Client:JsonVariation(featureName, defaultValue, forceSelectRealtimeToggle)
-  local variant = self:GetVariant(featureName, forceSelectRealtimeToggle)
-  return variant:JsonVariation(defaultValue)
+  return self:GetVariant(featureName, forceSelectRealtimeToggle):JsonVariation(defaultValue)
 end
 
 -- Utility method to get any type of variation based on payload type
 function Client:Variation(featureName, defaultValue, forceSelectRealtimeToggle)
-  local variant = self:GetVariant(featureName, forceSelectRealtimeToggle)
-  return variant:Variation(defaultValue)
+  return self:GetVariant(featureName, forceSelectRealtimeToggle):Variation(defaultValue)
 end
 
 function Client:createError(type, message, functionName, detail)
@@ -1429,7 +1392,7 @@ function Client:emitError(type, message, functionName, logLevel, detail)
     end
   end
 
-  self.logger.Log(logLevel, logMessage)
+  self.logger:Log(logLevel, logMessage)
 
   self:emit(Events.ERROR, errorData)
 

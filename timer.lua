@@ -102,8 +102,6 @@ function Timer:Tick()
       table.remove(self.timers, 1)
 
       if not timer.canceled then
-        self.logger:Debug("Executing timer: id=%d", timer.id)
-
         local ok, err = xpcall(timer.fn, debug.traceback)
         if not ok then
           self.client:emitError(

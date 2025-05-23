@@ -1,6 +1,6 @@
 --[[
-  Events is a table that defines a set of constants representing various event types 
-  used in the application. Each key in the table corresponds to a specific event type, 
+  Events is a table that defines a set of constants representing various event types
+  used in the application. Each key in the table corresponds to a specific event type,
   and its value is a string describing the event.
 
   Keys and their meanings:

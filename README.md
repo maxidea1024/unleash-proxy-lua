@@ -152,7 +152,7 @@ client:WaitUntilReady(function()
 
   -- 변형 정보 가져오기
   local variant = client:GetVariant("my-feature-with-variants")
-  print("변형 이름:", variant:GetVariantName())
+  print("변형 이름:", variant:VariantName())
   print("기능 활성화:", variant:IsEnabled())
 end)
 ```
@@ -769,8 +769,8 @@ end
 
 `GetVariant` 메서드는 `VariantProxy` 객체를 반환합니다. 이 프록시 객체는 변형 데이터에 안전하게 접근할 수 있는 다양한 메서드를 제공합니다:
 
-- `GetFeatureName()`: 기능 이름 반환
-- `GetVariantName()`: 변형 이름 반환
+- `FeatureName()`: 기능 이름 반환
+- `VariantName()`: 변형 이름 반환
 - `GetRawVariant()`: 원본 변형 객체 반환
 - `IsEnabled()`: 기능 활성화 여부 반환
 - `BoolVariation(defaultValue)`: 불리언 값 반환
@@ -781,8 +781,8 @@ end
 ```lua
 -- 변형 정보 가져오기
 local variant = client:GetVariant("my-feature")
-print("변형 이름:", variant:GetVariantName())
-print("기능 이름:", variant:GetFeatureName())
+print("변형 이름:", variant:VariantName())
+print("기능 이름:", variant:FeatureName())
 print("기능 활성화:", variant:IsEnabled())
 
 -- 변형 데이터 타입별 접근
@@ -837,7 +837,7 @@ local jsonValue = client:JsonVariation("my-json-feature", {})
 -- WatchToggle 사용 예제
 local unsubscribe = client:WatchToggle("new-feature", function(variant)
   print("Feature changed:", variant:IsEnabled())
-  print("Variant name:", variant:GetVariantName())
+  print("Variant name:", variant:VariantName())
 
   if variant:IsEnabled() then
     enableNewFeature()
@@ -852,7 +852,7 @@ unsubscribe()
 -- WatchToggleWithInitialState 사용 예제
 client:WatchToggleWithInitialState("new-feature", function(variant)
   print("Feature state:", variant:IsEnabled())
-  print("Variant name:", variant:GetVariantName())
+  print("Variant name:", variant:VariantName())
 
   if variant:IsEnabled() then
     enableNewFeature()
@@ -871,7 +871,7 @@ end)
 function initializeUIComponent()
   client:WatchToggleWithInitialState("new-ui-design", function(variant)
     if variant:IsEnabled() then
-      local variant = variant:GetVariantName()
+      local variant = variant:VariantName()
       if variant == "modern" then
         applyModernUITheme()
       elseif variant == "classic" then

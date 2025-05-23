@@ -5,18 +5,40 @@ local util = require("framework.3rdparty.feature-flags.util")
 local logger = require("framework.3rdparty.feature-flags.logger")
 local ErrorTypes = require("framework.3rdparty.feature-flags.error-types")
 local ErrorHelper = require("framework.3rdparty.feature-flags.error-helper")
+local Validation = require("framework.3rdparty.feature-flags.validation")
 
 local MetricsReporter = {}
 MetricsReporter.__index = MetricsReporter
 
 function MetricsReporter.New(config)
-  if not config.client then error("`client` is required") end
-  if not config.appName then error("`appName` is required") end
-  if not config.connectionId then error("`connectionId` is required") end
-  if not config.url then error("`url` is required") end
-  if not config.clientKey then error("`clientKey` is required") end
-  if not config.request then error("`request` is required") end
-  if not config.loggerFactory then error("`loggerFactory` is required") end
+  Validation.RequireTable(config, "config", "MetricsReporter.New")
+  Validation.RequireField(config, "client", "config", "MetricsReporter.New")
+  Validation.RequireField(config, "appName", "config", "MetricsReporter.New")
+  Validation.RequireField(config, "connectionId", "config", "MetricsReporter.New")
+  Validation.RequireField(config, "url", "config", "MetricsReporter.New")
+  Validation.RequireField(config, "clientKey", "config", "MetricsReporter.New")
+  Validation.RequireField(config, "request", "config", "MetricsReporter.New")
+  Validation.RequireField(config, "loggerFactory", "config", "MetricsReporter.New")
+
+  if config.metricsInterval ~= nil then
+    Validation.RequireNumber(config.metricsInterval, "config.metricsInterval", "MetricsReporter.New", 0)
+  end
+
+  if config.metricsIntervalInitial ~= nil then
+    Validation.RequireNumber(config.metricsIntervalInitial, "config.metricsIntervalInitial", "MetricsReporter.New", 0)
+  end
+
+  if config.disableMetrics ~= nil then
+    Validation.RequireBoolean(config.disableMetrics, "config.disableMetrics", "MetricsReporter.New")
+  end
+
+  if config.customHeaders ~= nil then
+    Validation.RequireTable(config.customHeaders, "config.customHeaders", "MetricsReporter.New")
+  end
+
+  if config.onSent ~= nil then
+    Validation.RequireFunction(config.onSent, "config.onSent", "MetricsReporter.New")
+  end
 
   local self = setmetatable({}, MetricsReporter)
   self.logger = config.loggerFactory:CreateLogger("UnleashMetricsReporter")
