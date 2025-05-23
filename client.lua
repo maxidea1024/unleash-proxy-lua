@@ -367,7 +367,6 @@ function Client:GetAllEnabledToggles()
 end
 
 function Client:IsEnabled(featureName, forceSelectRealtimeToggle)
-  -- 직접 유효성 검사 호출 (pcall 없이)
   Validation.RequireString(featureName, "featureName", "IsEnabled")
 
   local toggleMap = self:selectToggleMap(forceSelectRealtimeToggle)
@@ -650,6 +649,7 @@ end
 
 function Client:handleHttpErrorCases(url, statusCode, responseBody)
   local nextFetchDelay = self:backoff()
+
   local errorType = ErrorTypes.UNKNOWN_ERROR
   local errorMsg = "Unknown error"
   local detail = ErrorHelper.BuildHttpErrorDetail(url, statusCode, {
@@ -709,6 +709,7 @@ end
 
 function Client:getNextFetchDelay()
   local delay = self.refreshInterval
+
   if self.failures > 0 then
     local extra = math.pow(2, self.failures)
 
@@ -1237,16 +1238,19 @@ end
 
 function Client:On(event, callback)
   if self.offline then return function() end end
+
   return self.eventEmitter:On(event, callback)
 end
 
 function Client:Once(event, callback)
   if self.offline then return function() end end
+
   return self.eventEmitter:Once(event, callback)
 end
 
 function Client:Off(event, callback)
   if self.offline then return end
+
   self.eventEmitter:Off(event, callback)
 end
 
@@ -1288,9 +1292,7 @@ function Client:conditionalSyncToggles(force)
 end
 
 function Client:WatchToggle(featureName, callback)
-  if self.offline then
-    return function() end
-  end
+  if self.offline then return function() end end
 
   Validation.RequireString(featureName, "featureName", "WatchToggle")
   Validation.RequireFunction(callback, "callback", "WatchToggle")
@@ -1300,9 +1302,7 @@ function Client:WatchToggle(featureName, callback)
 end
 
 function Client:WatchToggleWithInitialState(featureName, callback)
-  if self.offline then
-    return function() end
-  end
+  if self.offline then return function() end end
 
   Validation.RequireString(featureName, "featureName", "WatchToggleWithInitialState")
   Validation.RequireFunction(callback, "callback", "WatchToggleWithInitialState")
@@ -1420,9 +1420,7 @@ function Client:emitError(type, message, functionName, logLevel, detail)
 end
 
 function Client:callWithGuard(callback, ...)
-  if not callback then
-    return
-  end
+  if not callback then return end
 
   local success, result = pcall(callback, ...)
   if not success then

@@ -219,4 +219,3 @@ function ClientConfigBuilder:CreateClient()
 end
 
 return ClientConfigBuilder
-
