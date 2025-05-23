@@ -22,6 +22,7 @@ local Events = {
   IMPRESSION = "impression",
   SENT = "sent",
   RECOVERED = "recovered",
+  FETCH_COMPLETED = "fetch_completed",
 }
 
 return Events

@@ -160,7 +160,9 @@ function Client.New(config)
   self.bootstrap = config.bootstrap
   self.bootstrapOverride = config.bootstrapOverride ~= false
 
-  -- Create EventEmitter with client reference for error handling
+  self.fetchingContextHash = nil
+  self.fetching = false
+
   self.eventEmitter = EventEmitter.New({
     loggerFactory = self.loggerFactory,
     client = self
@@ -169,7 +171,6 @@ function Client.New(config)
   self.timer = config.timer or Timer.New(self.loggerFactory, self)
   self.fetchTimer = nil
 
-  -- setup backoff
   self.backoffParams = {
     min = config.backoff and config.backoff.min or 1,        -- 1초부터 시작
     max = config.backoff and config.backoff.max or 10,       -- 10초까지 증가
@@ -448,25 +449,35 @@ function Client:UpdateToggles(callback)
     return
   end
 
-  -- FIXME
-  -- self.fetchTimer ~= nil 대신 self.fetching 플래그로 체크하는게 좋을듯
-  if self.fetchTimer ~= nil or self.fetchedFromServer then
-    self:cancelFetchTimer()
-    self:fetchToggles(callback)
+  local currentContextHash = Util.CalculateHash(self.context)
+
+  if self.fetching then
+    if self.fetchingContextHash ~= currentContextHash then
+      self.logger:Debug("Context changed while fetching, queuing new fetch")
+      self:Once(Events.FETCH_COMPLETED, function()
+        self:UpdateToggles(callback)
+      end)
+    else {
+      self.logger:Debug("Already fetching toggles, queuing callback")
+      self:Once(Events.FETCH_COMPLETED, function()
+        self:callWithGuard(callback)
+      end)
+    }
     return
   end
 
+  self.fetchingContextHash = currentContextHash
+
   if self.started then
+    self:cancelFetchTimer()
+    self:fetchToggles(callback)
+  else
     self:Once(Events.READY, function()
       self:cancelFetchTimer()
       self:fetchToggles(function()
         self:callWithGuard(callback)
       end)
     end)
-  else
-    -- If not started yet, we'll fetch toggles after start anyway,
-    -- so we can skip fetching toggles here.
-    self:callWithGuard(callback)
   end
 end
 
@@ -728,7 +739,7 @@ end
 function Client:timedFetch(interval)
   if interval > 0 then
     self.logger:Debug("Next fetch toggles in %.2fs", interval)
-    
+
     self.fetchTimer = self.timer:Timeout(interval, function()
       self:fetchToggles(function(err) end)
     end)
@@ -942,6 +953,12 @@ function Client:initialFetchToggles(callback)
 end
 
 function Client:fetchToggles(callback)
+  self.fetching = true
+  
+  if self.logger:IsEnabled(Logger.LogLevel.Debug) then
+    self.logger:Debug("Fetching toggles, context hash: %s", self.fetchingContextHash)
+  end
+  
   local isPOST = self.usePOSTrequests
   local url = isPOST and self.url or Util.UrlWithContextAsQuery(self.url, self.context)
   local body = nil
@@ -995,6 +1012,9 @@ function Client:fetchToggles(callback)
   -- end
 
   self.request(url, method, headers, body, function(response)
+    self.fetching = false
+    self:emit(Events.FETCH_COMPLETED)
+
     if self.sdkState == "error" and (response.status >= 200 and response.status < 400) then
       self.sdkState = "healthy"
       self:emit(Events.RECOVERED)
@@ -1184,7 +1204,7 @@ function Client:fetchToggles(callback)
         end)
       end)
     elseif response.status == 304 then
-      self.logger:Debug("No changes in feature flags, using cached data. etag=%s", tostring(self.etag))
+      self.logger:Debug("No changes in feature flags (304), using cached data")
 
       -- REMARKS
       --  When ETag is cached, although we didn't actually fetch from the server,
