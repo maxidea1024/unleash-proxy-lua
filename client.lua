@@ -351,8 +351,8 @@ function Client:WaitUntilReady(callback)
   end
 end
 
-function Client:GetAllEnabledToggles()
-  local toggleMap = self:selectToggleMap()
+function Client:GetAllToggles(forceSelectRealtimeToggle)
+  local toggleMap = self:selectToggleMap(forceSelectRealtimeToggle)
 
   local result = {}
   for _, toggle in pairs(toggleMap) do
@@ -372,28 +372,25 @@ function Client:IsEnabled(featureName, forceSelectRealtimeToggle)
   local toggleMap = self:selectToggleMap(forceSelectRealtimeToggle)
   local toggle = toggleMap[featureName]
 
-  -- Add debug log when toggle is not found
-  if not toggle and self.logger:IsEnabled(Logger.LogLevel.Debug) then
-    self.logger:Debug("Feature flag `%s` not found in toggle map", featureName)
-  end
-
   local enabled = (toggle and toggle.enabled) or false
 
-  if self.metricsReporter then
-    self.metricsReporter:Count(featureName, enabled)
-  end
+  if not self.offline then
+    if self.metricsReporter then
+      self.metricsReporter:Count(featureName, enabled)
+    end
 
-  local impressionData = self.impressionDataAll or (toggle and toggle.impressionData)
-  if impressionData then
-    local event = createImpressionEvent(
-      self.context,
-      enabled,
-      featureName,
-      IMPRESSION_EVENTS.IS_ENABLED,
-      (toggle and toggle.impressionData) or nil,
-      nil -- variant name is not applicable here
-    )
-    self:emit(Events.IMPRESSION, event)
+    local impressionData = self.impressionDataAll or (toggle and toggle.impressionData)
+    if impressionData then
+      local event = createImpressionEvent(
+        self.context,
+        enabled,
+        featureName,
+        IMPRESSION_EVENTS.IS_ENABLED,
+        (toggle and toggle.impressionData) or nil,
+        nil -- variant name is not applicable here
+      )
+      self:emit(Events.IMPRESSION, event)
+    end
   end
 
   return enabled
@@ -408,25 +405,26 @@ function Client:GetRawVariant(featureName, forceSelectRealtimeToggle)
   local enabled = (toggle and toggle.enabled) or false
   local variant = (toggle and toggle.variant) or DEFAULT_DISABLED_VARIANT
 
-  if self.metricsReporter then
-    if variant.name then
-      self.metricsReporter:CountVariant(featureName, variant.name)
+  if not self.offline then
+    if self.metricsReporter then
+      if variant.name then
+        self.metricsReporter:CountVariant(featureName, variant.name)
+      end
+      self.metricsReporter:Count(featureName, enabled)
     end
 
-    self.metricsReporter:Count(featureName, enabled)
-  end
-
-  local impressionData = self.impressionDataAll or (toggle and toggle.impressionData)
-  if impressionData then
-    local event = createImpressionEvent(
-      self.context,
-      enabled,
-      featureName,
-      IMPRESSION_EVENTS.GET_VARIANT,
-      (toggle and toggle.impressionData) or nil,
-      variant.name
-    )
-    self:emit(Events.IMPRESSION, event)
+    local impressionData = self.impressionDataAll or (toggle and toggle.impressionData)
+    if impressionData then
+      local event = createImpressionEvent(
+        self.context,
+        enabled,
+        featureName,
+        IMPRESSION_EVENTS.GET_VARIANT,
+        (toggle and toggle.impressionData) or nil,
+        variant.name
+      )
+      self:emit(Events.IMPRESSION, event)
+    end
   end
 
   return {
