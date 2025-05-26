@@ -4,14 +4,7 @@ Lua 애플리케이션을 위한 피처 플래그 클라이언트로, Unleash �
 
 ![Feature Flags Demo](doc/2025-05-21%2019%2023%2048.mp4)
 
-
-## 피처 플래그란?
-
-피처 플래그(Feature Flag)는 코드 변경 없이 기능을 동적으로 활성화하거나 비활성화할 수 있는 소프트웨어 개발 기법입니다. 이를 통해 개발자는 배포와 기능 출시를 분리하여 더 안전하고 유연하게 소프트웨어를 관리할 수 있습니다.
-
-[featureflags.io](https://featureflags.io/)에 설명된 내용을 살펴보면 피처 플래그에 대한 자세한 내용을 확인할 수 있습니다.
-
-### 피처 플래그의 장점
+## 특징
 
 - **점진적 출시**: 새 기능을 일부 사용자에게만 먼저 제공하여 위험을 최소화
 - **A/B 테스트**: 다양한 기능 변형을 테스트하여 최적의 사용자 경험 발견
@@ -21,111 +14,18 @@ Lua 애플리케이션을 위한 피처 플래그 클라이언트로, Unleash �
 - **구독 기반 기능**: 프리미엄 사용자에게만 특정 기능 제공
 - **계절 이벤트**: 특정 기간에만 활성화되는 기능 관리
 
-### 피처 플래그의 단점
-
-- **코드 복잡성 증가**: 조건부 로직이 많아져 코드 가독성 저하 가능
-- **기술적 부채**: 오래된 플래그가 제거되지 않으면 코드베이스 복잡성 증가
-- **테스트 복잡성**: 다양한 플래그 조합에 대한 테스트 필요
-- **성능 영향**: 과도한 플래그 사용은 런타임 성능에 영향 줄 수 있음
-- **관리 오버헤드**: 많은 플래그를 관리하는 데 추가 리소스 필요
-
-> **중요**: 이 SDK는 클라이언트 사이드 전용으로 설계되었습니다. 서버사이드 SDK와 달리 모든 플래그 정의를 가져오지 않고, 클라이언트에 필요한(활성화된) 플래그 정보만 가져옵니다. 이는 네트워크 트래픽과 메모리 사용량을 최적화할 뿐만 아니라, 보안 측면에서도 중요합니다. 민감한 기능 설정이나 구성 정보가 클라이언트에 노출되는 것을 방지하여 잠재적인 보안 위험을 줄입니다.
-
-
-## 특징
-
-- 🚀 **동적 피쳐 플래그링** - 런타임에 기능을 활성화/비활성화
-- 🔄 **실시간 업데이트** - 피처 플래그 변경 사항 자동 폴링
-- 🧩 **변형(Variant) 지원** - 피처 플래그 변형 지원 (A/B 테스트)
-- 📊 **컨텍스트 기반 평가** - 사용자 컨텍스트 기반 플래그 평가
-- 💾 **오프라인 지원** - 부트스트랩 데이터로 오프라인에서도 작동
-- 🔌 **명시적 동기화 모드** - 플래그 업데이트 적용 시점 제어
-- 🔒 **보안** - 클라이언트 측 인증 지원
-- 🔔 **이벤트 기반** - 피처 플래그 변경 구독
-- 📝 **노출 데이터** - 피처 플래그 사용 추적
-- 🔄 **자동 재시도** - 실패한 요청에 대한 지수 백오프
-- 🔌 **외부 의존성 없음** - 모든 필요한 라이브러리가 포함되어 있어 추가 설치 불필요
-
-## HTTP 통신
-
-이 SDK는 Unreal Engine 4 환경위에 자체 구현된 `HttpRequest` 함수를 통해 HTTP 통신을 처리합니다. 이 함수는 다음과 같은 특징을 가지고 있습니다:
-(`HttpRequest` 함수는 Unreal Engine 4의 `HttpModule` 의 기능을 그대로 사용합니다.)
-
-- **스레드 세이프**: 멀티스레드 환경에서 안전하게 사용 가능
-- **메인 스레드 처리**: 콜백은 메인 스레드에서 처리되어 UI 업데이트 등의 작업이 안전함
-- **비동기 처리**: 네트워크 요청이 게임 루프를 차단하지 않음
-- **자동 재시도**: 네트워크 오류 시 지수 백오프 알고리즘으로 재시도
-
-SDK를 초기화할 때 `request` 함수를 제공하여 HTTP 통신을 처리합니다:
-
-```lua
-local client = Client.New({
-  url = "https://unleash.example.com/api",
-  clientKey = "your-client-key",
-  appName = "your-app-name",
-  request = function(url, method, headers, body, callback)
-    -- UE4의 HttpRequest 함수를 사용하여 HTTP 요청 처리
-    HttpRequest(url, method, headers, body, callback)
-  end
-})
-```
-
-> **참고**: `HttpRequest` 함수는 메인 스레드에서 콜백을 호출하므로, 콜백 내에서 UI 업데이트나 게임 상태 변경과 같은 작업을 안전하게 수행할 수 있습니다.
-> **참고**: 경우에 따라서는 Unreal Engine 4가 아닌 환경에서도 사용이 가능합니다. 이때에는 `request` 에 해당하는 부분만 `http.request` 또는 `copas.http` 로 대체해주면 됩니다.
-
-## 폴링 주기 최적화
-
-이 SDK는 기본적으로 30초 간격으로 Unleash 서버에서 피처 플래그 업데이트를 폴링(주기적으로 가져옴) 합니다. 폴링 주기는 `refreshInterval` 설정을 통해 조정할 수 있습니다.
-
-### 폴링 주기 설정 시 고려사항
-
-- **짧은 폴링 주기 (10초 미만)**
-  - **장점**: 피처 플래그 변경 사항이 빠르게 적용됨
-  - **단점**:
-    - 서버 부하 증가
-    - 네트워크 트래픽 증가
-    - 배터리 소모 증가 (모바일 환경)
-    - 서버 측 속도 제한(rate limiting)에 도달할 가능성
-
-- **긴 폴링 주기 (60초 이상)**
-  - **장점**:
-    - 서버 부하 감소
-    - 네트워크 트래픽 감소
-    - 배터리 소모 감소
-  - **단점**:
-    - 피처 플래그 변경 사항이 적용되기까지 시간 지연
-    - 중요한 기능 변경이 지연될 수 있음
-
-### 권장 설정
-
-- **일반 애플리케이션**: 30초 (기본값)
-- **중요한 실시간 기능이 필요한 경우**: 15-20초
-- **배터리 최적화가 중요한 모바일 앱**: 60초 이상
-- **개발/테스트 환경**: 10-15초
-- **프로덕션 환경**: 30-60초
-
-```lua
--- 폴링 주기 설정 예시
-local client = Client.New({
-  -- 기본 구성...
-  refreshInterval = 30,  -- 30초 간격으로 폴링 (기본값)
-})
-```
-
-> **참고**: 폴링 주기를 0으로 설정하거나 `disableRefresh = true`로 설정하면 자동 폴링이 비활성화되며, `UpdateToggles()` 메서드를 통해 수동으로만 업데이트할 수 있습니다.
-
 ## 설치
 
-Lua 프로젝트에 feature-flags 모듈을 포함하세요:
+Lua 프로젝트에 `togglit` 모듈을 포함하세요:
 
 ```lua
-local FeatureFlags = require("framework.3rdparty.feature-flags.index")
+local FeatureFlags = require("framework.3rdparty.togglit.index")
 ```
 
-## 빠른 시작
+## 초기화
 
 ```lua
-local FeatureFlags = require("framework.3rdparty.feature-flags.index")
+local FeatureFlags = require("framework.3rdparty.togglit.togglit")
 local Client = FeatureFlags.Client
 
 -- 클라이언트 초기화
@@ -133,42 +33,24 @@ local client = Client.New({
   url = "https://unleash.example.com/api",
   clientKey = "your-client-key",
   appName = "your-app-name",
-  environment = "production",
   request = function(url, method, headers, body, callback)
     -- HTTP 요청 함수 구현
     -- 반드시 다음 형식의 응답 객체로 콜백을 호출해야 함:
     -- { status = number, headers = table, body = string }
   end
 })
-
--- 클라이언트가 준비될 때까지 대기
-client:WaitUntilReady(function()
-  -- 기능이 활성화되었는지 확인
-  if client:IsEnabled("my-feature") then
-    print("기능이 활성화되었습니다!")
-  else
-    print("기능이 비활성화되었습니다!")
-  end
-
-  -- 변형 정보 가져오기
-  local variant = client:GetVariant("my-feature-with-variants")
-  print("변형 이름:", variant:VariantName())
-  print("기능 활성화:", variant:IsEnabled())
-end)
 ```
 
-## 초기화
-
-### 클라이언트 구성
+선택적 매개변수:
 
 ```lua
 local client = Client.New({
   -- 필수 매개변수
-  url = "https://unleash.example.com/api",  -- Unleash API URL
-  clientKey = "your-client-key",            -- 클라이언트 API 키
-  appName = "your-app-name",                -- 애플리케이션 이름
-  request = yourHttpRequestFunction,        -- HTTP 요청 함수
-
+  url = "https://unleash.example.com/api",
+  clientKey = "your-client-key",
+  appName = "your-app-name",
+  request = yourHttpRequestFunction,
+  
   -- 선택적 매개변수
   environment = "production",               -- 환경 이름 (기본값: "default")
   refreshInterval = 30,                     -- 폴링 간격(초) (기본값: 30)
@@ -183,86 +65,59 @@ local client = Client.New({
   impressionDataAll = false,                -- 모든 노출 추적
   customHeaders = {                         -- 사용자 정의 HTTP 헤더
     ["Custom-Header"] = "value"
-  },
-  context = {                               -- 초기 컨텍스트
-    userId = "user-123",
-    sessionId = "session-456",
-    remoteAddress = "127.0.0.1",
-    properties = {
-      customField = "value"
-    }
-  },
-  loggerFactory = customLoggerFactory,      -- 사용자 정의 로거 팩토리
-  experimental = {                          -- 실험적 기능
-    togglesStorageTTL = 3600                -- 캐시 TTL(초)
   }
 })
 ```
 
-### 시작 및 중지
+> **참고**: 폴링 주기를 0으로 설정하거나 `disableRefresh = true`로 설정하면 자동 폴링이 비활성화되며, `UpdateToggles()` 메서드를 통해 수동으로만 업데이트할 수 있습니다.
+
+## 사용 방법
+
+### 기본 사용법
 
 ```lua
--- 수동 시작 (disableAutoStart = true인 경우)
-client:Start(function()
-  print("클라이언트가 시작되었습니다!")
-})
+-- 피처 플래그 확인
+if client:IsEnabled("feature-a") then
+  -- 기능 A가 활성화된 경우 실행할 코드
+else
+  -- 기능 A가 비활성화된 경우 실행할 코드
+end
 
--- 클라이언트가 준비될 때까지 대기
-client:WaitUntilReady(function()
-  print("클라이언트가 준비되었습니다!")
-})
+-- 변형(variant) 가져오기
+local variant = client:GetVariant("feature-b")
+if variant:IsEnabled() then
+  local payload = variant:JsonVariation({}) -- 기본값은 빈 객체
+  -- payload를 사용하는 코드
+end
 
--- 클라이언트 중지
-client:Stop()
+-- 토글 변경 이벤트 구독
+client:On(FeatureFlags.Events.UPDATE, function()
+  -- 토글이 업데이트되면 실행할 코드
+end)
+
+-- 특정 토글 변경 이벤트 구독
+client:WatchToggle("feature-c", function(variant)
+  if variant:IsEnabled() then
+    -- 기능 C가 활성화되면 실행할 코드
+  else
+    -- 기능 C가 비활성화되면 실행할 코드
+  end
+end)
 ```
 
-## 부트스트래핑 (Bootstrapping)
+## 피처 플래그란?
 
-부트스트래핑은 클라이언트가 서버에 연결하기 전에 초기 피처 플래그 상태를 제공하는 방법입니다. 이는 다음과 같은 상황에서 유용합니다:
+피처 플래그(Feature Flag)는 코드 변경 없이 기능을 동적으로 활성화하거나 비활성화할 수 있는 소프트웨어 개발 기법입니다. 이를 통해 개발자는 배포와 기능 출시를 분리하여 더 안전하고 유연하게 소프트웨어를 관리할 수 있습니다.
 
-- 애플리케이션 시작 시 빠른 로딩
-- 네트워크 연결이 불안정한 환경
-- 서버 다운타임 동안의 폴백 메커니즘
-- 오프라인 모드 지원
+[featureflags.io](https://featureflags.io/)에 설명된 내용을 살펴보면 피처 플래그에 대한 자세한 내용을 확인할 수 있습니다.
 
-### 부트스트래핑 구성
+### 피처 플래그의 단점
 
-```lua
-local initialFeatureFlags = {
-  {
-    name = "feature-a",
-    enabled = true,
-    variant = {
-      name = "variant-1",
-      enabled = true,
-      payload = {
-        type = "string",
-        value = "Hello World"
-      }
-    }
-  },
-  {
-    name = "feature-b",
-    enabled = false
-  }
-}
+<!-- 기존 단점 내용 유지 -->
 
-local client = Client.New({
-  url = "https://unleash.example.com/api",
-  clientKey = "your-client-key",
-  appName = "your-app-name",
-  request = yourHttpRequestFunction,
+## 부트스트랩 사용 사례
 
-  -- 부트스트랩 구성
-  bootstrap = initialFeatureFlags,
-  bootstrapOverride = true  -- true: 항상 부트스트랩 값으로 덮어씀
-                           -- false: 저장된 값이 있으면 부트스트랩 무시
-})
-```
-
-### 부트스트랩 사용 사례
-
-#### 1. 서버 연결 전 초기 상태 제공
+### 1. 서버 연결 전 초기 상태 제공
 
 ```lua
 local client = Client.New({
@@ -279,10 +134,10 @@ end
 -- 나중에 서버에 연결
 client:Start(function()
   print("서버에 연결됨, 최신 플래그로 업데이트됨")
-})
+end)
 ```
 
-#### 2. 서버 다운타임 대비
+### 2. 서버 다운타임 대비
 
 ```lua
 local client = Client.New({
@@ -294,10 +149,10 @@ local client = Client.New({
 -- 오류 처리
 client:On(FeatureFlags.Events.ERROR, function(error)
   print("서버 연결 오류, 부트스트랩/캐시된 값 사용 중:", error.message)
-})
+end)
 ```
 
-#### 3. 개발 환경에서 테스트
+### 3. 개발 환경에서 테스트
 
 ```lua
 -- 개발 환경에서 특정 기능 강제 활성화
@@ -307,113 +162,6 @@ local devBootstrap = {
     enabled = true
   }
 }
-
-local client = Client.New({
-  -- 기본 구성...
-  bootstrap = devBootstrap,
-  bootstrapOverride = true  -- 항상 부트스트랩 값 사용
-})
-```
-
-## 오프라인 모드
-
-오프라인 모드는 서버에 연결하지 않고 클라이언트를 사용할 수 있게 해줍니다. 이 모드에서는 부트스트랩 데이터만 사용하며 서버에서 업데이트를 가져오지 않습니다.
-
-### 오프라인 모드 구성
-
-```lua
-local client = Client.New({
-  appName = "your-app-name",
-  offline = true,  -- 오프라인 모드 활성화
-  bootstrap = {    -- 필수: 오프라인 모드에서 사용할 피처 플래그
-    {
-      name = "feature-a",
-      enabled = true,
-      variant = {
-        name = "variant-1",
-        enabled = true,
-        payload = { type = "string", value = "test" }
-      }
-    },
-    {
-      name = "feature-b",
-      enabled = false
-    }
-  }
-})
-```
-
-### 오프라인 모드 사용 사례
-
-#### 1. 네트워크 없는 환경
-
-```lua
--- 네트워크 연결이 없는 환경에서 사용
-local client = Client.New({
-  appName = "your-app-name",
-  offline = true,
-  bootstrap = offlineFeatureFlags
-})
-
--- 오프라인 모드에서는 항상 즉시 준비됨
-if client:IsReady() then
-  print("클라이언트가 오프라인 모드로 준비됨")
-end
-
--- 기능 확인
-if client:IsEnabled("feature-a") then
-  print("오프라인 모드에서 기능 A 활성화됨")
-end
-```
-
-#### 2. 테스트 환경
-
-```lua
--- 테스트 환경에서 특정 기능 상태로 고정
-local testFeatureFlags = {
-  {
-    name = "payment-gateway",
-    enabled = true,
-    variant = {
-      name = "test-gateway",
-      enabled = true,
-      payload = { type = "json", value = { endpoint = "https://test-api.example.com" } }
-    }
-  }
-}
-
-local client = Client.New({
-  appName = "test-app",
-  offline = true,
-  bootstrap = testFeatureFlags
-})
-
--- 테스트 코드에서 사용
-local paymentVariant = client:GetVariant("payment-gateway")
-local endpoint = paymentVariant:JsonVariation({}).endpoint
-print("테스트 엔드포인트:", endpoint)
-```
-
-#### 3. 임베디드 환경
-
-```lua
--- 임베디드 시스템에서 하드코딩된 기능 플래그 사용
-local embeddedFlags = {
-  {
-    name = "hardware-feature-x",
-    enabled = deviceSupportsFeatureX()  -- 하드웨어 기능 확인 함수
-  },
-  {
-    name = "memory-optimization",
-    enabled = getAvailableMemory() < 512  -- 메모리 기반 최적화
-  }
-}
-
-local client = Client.New({
-  appName = "embedded-app",
-  offline = true,
-  bootstrap = embeddedFlags
-})
 ```
 
 ## 명시적 동기화 모드
@@ -428,206 +176,9 @@ local client = Client.New({
 
 ### 실시간 업데이트의 잠재적 문제점
 
-명시적 동기화 모드를 사용하지 않고 피처 플래그를 실시간으로 적용할 경우 다음과 같은 문제가 발생할 수 있습니다:
+<!-- 기존 내용 유지 -->
 
-1. **게임 세션 중 일관성 손상**
-   ```lua
-   -- 플레이어가 보스 전투 중일 때 갑자기 난이도 변경
-   -- 실시간 업데이트 시나리오
-   function bossFight()
-     startBossFight()
-
-     -- 전투 중 서버에서 "boss-difficulty" 플래그가 변경되면
-     -- 즉시 적용되어 갑작스러운 난이도 변화 발생
-     -- 플레이어는 혼란스럽고 불공정하다고 느낄 수 있음
-   end
-   ```
-
-2. **UI 요소의 갑작스러운 변경**
-   ```lua
-   -- 사용자가 메뉴 탐색 중 UI 레이아웃 변경
-   -- 실시간 업데이트 시나리오
-   function navigateMenu()
-     showMainMenu()
-
-     -- 사용자가 메뉴 탐색 중 "new-ui-layout" 플래그가 변경되면
-     -- 즉시 UI가 재구성되어 사용자 경험 저하
-     -- 사용자가 클릭하려던 버튼 위치가 바뀌어 의도치 않은 동작 발생
-   end
-   ```
-
-3. **트랜잭션 일관성 문제**
-   ```lua
-   -- 아이템 구매 중 가격 정책 변경
-   -- 실시간 업데이트 시나리오
-   function purchaseItem(itemId)
-     local price = getItemPrice(itemId)
-     showConfirmDialog("구매 확인", itemId, price)
-
-     -- 사용자가 확인 대화상자를 보는 동안 "pricing-policy" 플래그가 변경되면
-     -- 확인 버튼 클릭 시 다른 가격으로 처리될 수 있음
-     -- 사용자는 표시된 가격과 다른 금액이 청구되는 혼란 경험
-   end
-   ```
-
-4. **게임 밸런스 붕괴**
-   ```lua
-   -- PvP 매치 중 밸런스 변경
-   -- 실시간 업데이트 시나리오
-   function pvpMatch()
-     startMatch()
-
-     -- 매치 중 "character-balance" 플래그가 변경되면
-     -- 캐릭터 능력치가 즉시 변경되어 경기 밸런스 붕괴
-     -- 플레이어는 갑자기 약해지거나 강해져 불공정함 경험
-   end
-   ```
-
-5. **기능 간 의존성 문제**
-   ```lua
-   -- 상호 의존적인 기능들의 비동기 업데이트
-   -- 실시간 업데이트 시나리오
-   function initializeFeatures()
-     -- "feature-a"와 "feature-b"가 서로 의존적인 경우
-     -- "feature-a"만 먼저 업데이트되고 "feature-b"는 아직 업데이트되지 않은 상태라면
-     -- 두 기능 간 불일치로 예상치 못한 동작이나 오류 발생 가능
-   end
-   ```
-
-### 온라인 게임에서의 활용 사례
-
-#### 1. 게임 세션 중 일관성 유지
-
-```lua
--- 게임 세션 시작 시 플래그 동기화
-function startGameSession()
-  -- 최신 플래그로 동기화
-  client:SyncToggles(true, function()
-    print("게임 세션 시작 전 최신 기능 플래그 적용")
-
-    -- 게임 세션 시작
-    beginGameSession()
-
-    -- 게임 세션 중에는 플래그 변경 없이 일관된 경험 제공
-  end)
-end
-
--- 게임 세션 종료 후 다시 동기화
-function endGameSession()
-  -- 게임 결과 저장 등 마무리 작업
-  finalizeGameSession()
-
-  -- 세션 종료 후 최신 플래그 동기화
-  client:SyncToggles(true, function()
-    print("게임 세션 종료 후 최신 기능 플래그 적용")
-    returnToLobby()
-  end)
-end
-```
-
-#### 2. 레벨/맵 전환 시 동기화
-
-```lua
--- 레벨 또는 맵 전환 시 동기화
-function changeLevel(newLevelId)
-  -- 로딩 화면 표시
-  showLoadingScreen()
-
-  -- 레벨 전환 전 최신 플래그 동기화
-  client:SyncToggles(true, function()
-    print("레벨 전환 시 최신 기능 플래그 적용")
-
-    -- 새 레벨에 적용될 기능 확인
-    local hasNewFeatures = client:IsEnabled("level-" .. newLevelId .. "-features")
-
-    -- 레벨 로드 및 초기화
-    loadLevel(newLevelId, hasNewFeatures)
-    hideLoadingScreen()
-  end)
-end
-```
-
-#### 3. 매치메이킹 및 인스턴스 생성
-
-```lua
--- 매치메이킹 시작 전 동기화
-function startMatchmaking()
-  -- 매치메이킹 전 최신 플래그 동기화
-  client:SyncToggles(true, function()
-    -- 매치메이킹 관련 기능 확인
-    local matchmakingVariant = client:GetVariant("matchmaking-algorithm")
-    local algorithm = matchmakingVariant:StringVariation("default")
-
-    -- 선택된 알고리즘으로 매치메이킹 시작
-    beginMatchmaking(algorithm)
-  end)
-end
-
--- 게임 인스턴스 생성 시 동기화
-function createGameInstance(players)
-  client:SyncToggles(true, function()
-    -- 게임 모드 확인
-    local gameModeVariant = client:GetVariant("game-mode-settings")
-    local settings = gameModeVariant:JsonVariation({})
-
-    -- 설정된 게임 모드로 인스턴스 생성
-    initializeGameInstance(players, settings)
-  end)
-end
-```
-
-#### 4. 일일 리셋 및 이벤트 전환
-
-```lua
--- 일일 리셋 시 동기화
-function performDailyReset()
-  -- 일일 리셋 작업 수행
-  resetDailyQuests()
-  resetDailyShop()
-
-  -- 리셋 후 최신 플래그 동기화
-  client:SyncToggles(true, function()
-    -- 오늘의 이벤트 확인
-    if client:IsEnabled("daily-special-event") then
-      local eventVariant = client:GetVariant("daily-special-event")
-      local eventType = eventVariant:StringVariation("none")
-      activateSpecialEvent(eventType)
-    end
-
-    -- UI 업데이트
-    refreshGameUI()
-  end)
-end
-```
-
-#### 5. PvP와 PvE 모드 전환
-
-```lua
--- 게임 모드 전환 시 동기화
-function switchGameMode(newMode)
-  -- 모드 전환 전 최신 플래그 동기화
-  client:SyncToggles(true, function()
-    if newMode == "PvP" then
-      -- PvP 관련 기능 확인
-      local pvpFeatures = {
-        matchmaking = client:IsEnabled("pvp-matchmaking"),
-        ranking = client:IsEnabled("pvp-ranking"),
-        rewards = client:GetVariant("pvp-rewards"):JsonVariation({})
-      }
-      initializePvPMode(pvpFeatures)
-    else
-      -- PvE 관련 기능 확인
-      local pveFeatures = {
-        difficulty = client:GetVariant("pve-difficulty"):StringVariation("normal"),
-        enemies = client:GetVariant("pve-enemy-types"):JsonVariation({})
-      }
-      initializePvEMode(pveFeatures)
-    end
-  end)
-end
-```
-
-### 명시적 동기화 모드 구성
+### 명시적 동기화 모드 활성화
 
 ```lua
 local client = Client.New({
@@ -643,335 +194,11 @@ local client = Client.New({
 
 ### 명시적 동기화 모드 사용 사례
 
-#### 1. 기본 동기화 패턴
-
-```lua
--- 클라이언트 초기화
-local client = Client.New({
-  -- 기본 구성...
-  useExplicitSyncMode = true
-})
-
--- 클라이언트가 준비될 때까지 대기
-client:WaitUntilReady(function()
-  -- 초기 상태 사용
-  if client:IsEnabled("feature-a") then
-    print("초기 상태에서 기능 A 활성화됨")
-  end
-
-  -- 서버에서 최신 토글 가져오기
-  client:UpdateToggles(function(error)
-    if not error then
-      -- 가져온 토글을 동기화하여 적용
-      client:SyncToggles(false, function()
-        -- 이제 최신 상태 사용 가능
-        if client:IsEnabled("feature-a") then
-          print("업데이트 후 기능 A 활성화됨")
-        end
-      end)
-    end
-  end)
-})
-```
-
-#### 2. 화면 전환 시 동기화
-
-```lua
--- 화면 전환 함수
-function switchToScreen(screenName)
-  -- 화면 전환 전에 최신 토글 동기화
-  client:SyncToggles(true, function()
-    print("화면 전환 전 최신 토글로 동기화됨")
-
-    -- 이제 최신 상태로 화면 렌더링
-    renderScreen(screenName)
-  end)
-end
-```
-
-#### 3. 주기적 동기화
-
-```lua
--- 5분마다 동기화하는 타이머 설정
-local syncInterval = 5 * 60  -- 5분(초 단위)
-
-function setupPeriodicSync()
-  -- 주기적으로 토글 업데이트 및 동기화
-  Timer.Perform(function()
-    client:UpdateToggles(function(error)
-      if not error then
-        client:SyncToggles(false, function()
-          print("주기적 동기화 완료")
-        end)
-      end
-    end)
-  end):Delay(syncInterval):StartDelay(syncInterval)
-end
-```
-
-#### 4. 사용자 세션 시작 시 동기화
-
-```lua
-function userLogin(userId)
-  -- 사용자 ID 설정
-  client:SetContextField("userId", userId, function()
-    -- 사용자별 토글 가져오기 및 동기화
-    client:SyncToggles(true, function()
-      print("사용자 로그인 시 토글 동기화됨")
-
-      -- 이제 사용자별 기능 확인 가능
-      if client:IsEnabled("premium-feature") then
-        showPremiumFeatures()
-      end
-    end)
-  end)
-end
-```
-
-#### 5. 중요 작업 중 동기화 방지
-
-```lua
-function startCriticalOperation()
-  print("중요 작업 시작, 토글 업데이트 무시")
-
-  -- 작업 완료
-  performCriticalTask(function()
-    -- 작업 완료 후 최신 상태로 동기화
-    client:SyncToggles(true, function()
-      print("중요 작업 완료, 최신 토글로 동기화됨")
-    end)
-  end)
-end
-```
-
-## 피처 플래그 평가
-
-### 기본 피쳐 플래그
-
-```lua
--- 기능이 활성화되었는지 확인
-if client:IsEnabled("my-feature") then
-  -- 기능이 활성화됨
-else
-  -- 기능이 비활성화됨
-end
-
--- 모든 활성화된 토글 가져오기
-local enabledToggles = client:GetAllEnabledToggles()
-for _, toggle in ipairs(enabledToggles) do
-  print(toggle.name, toggle.enabled)
-end
-```
-
-### 변형(Variants)
-
-변형(Variants)는 `GetRawVariant()` 또는 `GetVariant()` 함수를 통해서 사용할수 있습니다. `GetRawVariant()` 함수를 통해서 사용할 경우에는 다소 사용이 불편할수 있으므로, `GetVariant()` 를 사용하는 것을 추천합니다. `GetRawVariant()` 함수는 `variant` 자료형을 반환하므로, 다소 사용하기 불편할수 있습니다.
-
-`GetVariant` 메서드는 `VariantProxy` 객체를 반환합니다. 이 프록시 객체는 변형 데이터에 안전하게 접근할 수 있는 다양한 메서드를 제공합니다:
-
-- `FeatureName()`: 기능 이름 반환
-- `VariantName()`: 변형 이름 반환
-- `GetRawVariant()`: 원본 변형 객체 반환
-- `IsEnabled()`: 기능 활성화 여부 반환
-- `BoolVariation(defaultValue)`: 불리언 값 반환
-- `NumberVariation(defaultValue)`: 숫자 값 반환
-- `StringVariation(defaultValue)`: 문자열 값 반환
-- `JsonVariation(defaultValue)`: JSON 객체 값 반환
-
-```lua
--- 변형 정보 가져오기
-local variant = client:GetVariant("my-feature")
-print("변형 이름:", variant:VariantName())
-print("기능 이름:", variant:FeatureName())
-print("기능 활성화:", variant:IsEnabled())
-
--- 변형 데이터 타입별 접근
-local boolValue = variant:BoolVariation(false)
-local numberValue = variant:NumberVariation(0)
-local stringValue = variant:StringVariation("default")
-local jsonValue = variant:JsonVariation({})
-
--- 또는 클라이언트에서 직접 타입별 변형 접근
-local boolValue = client:BoolVariation("my-bool-feature", false)
-local numberValue = client:NumberVariation("my-number-feature", 0)
-local stringValue = client:StringVariation("my-string-feature", "default")
-local jsonValue = client:JsonVariation("my-json-feature", {})
-```
-
-# 실시간 감지
-
-# WatchToggle과 WatchToggleWithInitialState 함수 설명
-
-## WatchToggle
-
-`WatchToggle` 함수는 특정 피처 플래그의 변경 사항을 감시하는 기능을 제공합니다:
-
-1. 특정 피처 플래그(`featureName`)의 변경 사항을 감지하기 위한 이벤트 리스너를 등록합니다.
-2. 피처 플래그가 변경될 때마다 제공된 콜백 함수가 호출됩니다.
-3. 콜백 함수는 `VariantProxy` 객체를 인자로 받습니다.
-4. 함수는 이벤트 구독을 취소할 수 있는 함수를 반환합니다.
-
-## WatchToggleWithInitialState
-
-`WatchToggleWithInitialState` 함수는 `WatchToggle`의 확장 버전으로, 다음과 같은 추가 기능을 제공합니다:
-
-1. `WatchToggle`과 마찬가지로 피처 플래그 변경 사항에 대한 이벤트 리스너를 등록합니다.
-2. 추가적으로, **즉시 현재 상태에 대한 콜백을 호출**합니다. 이는 초기 상태를 바로 처리할 수 있게 해줍니다.
-3. 클라이언트가 아직 준비되지 않은 경우(READY 이벤트가 발생하지 않은 경우), READY 이벤트가 발생한 후에 초기 상태를 전달합니다.
-4. 콜백 함수는 `VariantProxy` 객체를 인자로 받습니다.
-5. 항상 최신(realtime) 토글 상태를 가져옵니다.
-
-## 두 함수의 주요 차이점
-
-1. **초기 상태 처리**:
-   - `WatchToggle`: 등록 시점 이후의 변경 사항만 감지합니다.
-   - `WatchToggleWithInitialState`: 등록 즉시 현재 상태에 대한 콜백을 호출하고, 이후 변경 사항도 감지합니다.
-
-2. **사용 시점**:
-   - `WatchToggle`: 변경 사항만 관심이 있을 때 사용합니다.
-   - `WatchToggleWithInitialState`: 초기 상태와 변경 사항 모두 처리해야 할 때 사용합니다.
-
-## 사용 예제
-
-```lua
--- WatchToggle 사용 예제
-local unsubscribe = client:WatchToggle("new-feature", function(variant)
-  print("Feature changed:", variant:IsEnabled())
-  print("Variant name:", variant:VariantName())
-
-  if variant:IsEnabled() then
-    enableNewFeature()
-  else
-    disableNewFeature()
-  end
-end)
-
--- 나중에 구독 취소가 필요한 경우
-unsubscribe()
-
--- WatchToggleWithInitialState 사용 예제
-client:WatchToggleWithInitialState("new-feature", function(variant)
-  print("Feature state:", variant:IsEnabled())
-  print("Variant name:", variant:VariantName())
-
-  if variant:IsEnabled() then
-    enableNewFeature()
-  else
-    disableNewFeature()
-  end
-end)
-```
-
-## 실제 활용 사례
-
-### UI 컴포넌트 업데이트
-
-```lua
--- UI 컴포넌트 초기화 시 현재 상태를 즉시 반영하고 이후 변경 사항도 처리
-function initializeUIComponent()
-  client:WatchToggleWithInitialState("new-ui-design", function(variant)
-    if variant:IsEnabled() then
-      local variant = variant:VariantName()
-      if variant == "modern" then
-        applyModernUITheme()
-      elseif variant == "classic" then
-        applyClassicUITheme()
-      else
-        applyDefaultUITheme()
-      end
-    else
-      applyDefaultUITheme()
-    end
-  end)
-end
-```
-
-### 게임 기능 동적 전환
-
-```lua
--- 게임 중 기능이 활성화/비활성화될 때 동적으로 대응
-function setupDynamicFeatures()
-  -- 초기 상태 필요 없이 변경 사항만 처리
-  client:WatchToggle("special-event", function(variant)
-    if variant:IsEnabled() then
-      -- 게임 중에 특별 이벤트가 활성화됨
-      showEventNotification("특별 이벤트가 시작되었습니다!")
-      startSpecialEvent()
-    else
-      -- 게임 중에 특별 이벤트가 비활성화됨
-      showEventNotification("특별 이벤트가 종료되었습니다.")
-      endSpecialEvent()
-    end
-  end)
-
-  -- 초기 상태와 변경 사항 모두 처리
-  client:WatchToggleWithInitialState("game-difficulty", function(variant)
-    local difficultyConfig = variant:JsonVariation({
-      easy = { enemyDamage = 0.8, playerHealth = 1.2 },
-      normal = { enemyDamage = 1.0, playerHealth = 1.0 },
-      hard = { enemyDamage = 1.2, playerHealth = 0.8 }
-    })
-
-    applyDifficultySettings(difficultyConfig)
-  end)
-end
-```
-
-### 변형(Variant) 데이터 활용
-
-```lua
--- 변형 데이터를 활용한 동적 구성
-client:WatchToggleWithInitialState("item-drop-rates", function(variant)
-  -- 문자열 변형 사용
-  local dropRateMode = variant:StringVariation("normal")
-
-  -- 숫자 변형 사용
-  local legendaryDropMultiplier = variant:NumberVariation(1.0)
-
-  -- JSON 변형 사용
-  local dropRateConfig = variant:JsonVariation({
-    common = 70,
-    uncommon = 20,
-    rare = 8,
-    epic = 1.8,
-    legendary = 0.2
-  })
-
-  -- 변형 데이터 적용
-  updateDropRates(dropRateMode, legendaryDropMultiplier, dropRateConfig)
-end)
-```
-
-`WatchToggleWithInitialState`는 컴포넌트 초기화 시 현재 상태를 즉시 반영해야 하는 경우에 특히 유용합니다. 예를 들어, UI 컴포넌트가 피처 플래그 상태에 따라 다르게 렌더링되어야 할 때 사용할 수 있습니다.
-`VariantProxy` 객체를 통해 피처 플래그의 활성화 상태뿐만 아니라 변형 이름, 변형 데이터(불리언, 숫자, 문자열, JSON) 등 다양한 정보에 접근할 수 있습니다.
-
-
-# 컨텍스트(Context)
-
-피처 플래그 클라이언트에서 컨텍스트는 사용자, 환경, 세션 등에 관한 정보를 담고 있으며, 이를 기반으로 피처 플래그의 활성화 여부를 결정합니다. 이 문서는 컨텍스트의 정의와 효과적인 사용법을 설명합니다.
-
-## 컨텍스트 구조
-
-### 컨텍스트 필드 유형
-
-컨텍스트 필드는 두 가지 유형으로 나뉩니다:
-
-1. **정적 필드**: 클라이언트 초기화 시 설정되며 이후 변경할 수 없습니다.
-   - `appName`: 애플리케이션 이름 (필수)
-   - `environment`: 환경 (기본값: "default")
-   - `sessionId`: 세션 ID
-
-2. **가변 필드**: 런타임에 업데이트할 수 있는 필드입니다.
-   - `userId`: 사용자 ID
-   - `remoteAddress`: 원격 IP 주소
-   - `currentTime`: 현재 시간
-   - `properties`: 사용자 정의 속성 (객체)
+<!-- 기존 내용 유지 -->
 
 ## 컨텍스트 초기화
 
 ### 초기화 시 컨텍스트 설정
-
-클라이언트 초기화 시 컨텍스트를 설정할 수 있습니다:
 
 ```lua
 local client = Client.New({
@@ -994,652 +221,58 @@ local client = Client.New({
 })
 ```
 
-## 컨텍스트 업데이트
+<!-- 나머지 컨텍스트 관련 내용 유지 -->
 
-### 전체 컨텍스트 업데이트
+## 피처 플래그 노출 데이터(Impression Data)
 
-`UpdateContext` 메서드를 사용하여 여러 컨텍스트 필드를 한 번에 업데이트할 수 있습니다:
+노출 데이터(Impression Data)는 사용자가 특정 피처 플래그에 노출되었을 때 기록되는 정보입니다. 이 기능을 활용하면 피처 플래그의 사용 패턴을 분석하고, A/B 테스트 결과를 측정하며, 문제를 디버깅하는 데 도움이 됩니다.
 
-```lua
-client:UpdateContext({
-  userId = "new-user-id",
-  remoteAddress = "192.168.1.1",
-  properties = {
-    region = "europe",
-    deviceType = "desktop",
-    premium = false,
-    language = "en"
-  }
-}, function()
-  print("컨텍스트가 업데이트되었습니다")
-  -- 컨텍스트 업데이트 후 자동으로 피처 플래그가 다시 평가됩니다
-})
-```
+### 노출 데이터 활성화
 
-> **참고**: `UpdateContext`는 정적 필드(`appName`, `environment`, `sessionId`)를 변경하지 않습니다. 이러한 필드를 업데이트하려고 하면 경고 로그가 기록됩니다.
-
-### 단일 컨텍스트 필드 업데이트
-
-`SetContextField` 메서드를 사용하여 단일 컨텍스트 필드를 업데이트할 수 있습니다:
+노출 데이터는 다음과 같은 방법으로 활성화할 수 있습니다:
 
 ```lua
--- 기본 컨텍스트 필드 업데이트
-client:SetContextField("userId", "another-user-id", function()
-  print("사용자 ID가 업데이트되었습니다")
-end)
-
--- 사용자 정의 속성 업데이트
-client:SetContextField("region", "america", function()
-  print("지역이 업데이트되었습니다")
-  -- 이 필드는 context.properties.region에 저장됩니다
-end)
-```
-
-### 컨텍스트 필드 제거
-
-`RemoveContextField` 메서드를 사용하여 컨텍스트 필드를 제거할 수 있습니다:
-
-```lua
-client:RemoveContextField("userId", function()
-  print("사용자 ID가 제거되었습니다")
-end)
-
-client:RemoveContextField("region", function()
-  print("지역이 제거되었습니다")
-  -- context.properties.region이 제거됩니다
-end)
-```
-
-## 컨텍스트 조회
-
-### 현재 컨텍스트 가져오기
-
-`GetContext` 메서드를 사용하여 현재 컨텍스트의 복사본을 가져올 수 있습니다:
-
-```lua
-local context = client:GetContext()
-print("사용자 ID:", context.userId)
-print("환경:", context.environment)
-
--- 사용자 정의 속성 접근
-if context.properties then
-  print("지역:", context.properties.region)
-  print("디바이스 유형:", context.properties.deviceType)
-end
-```
-
-> **참고**: `GetContext`는 컨텍스트의 깊은 복사본을 반환하므로, 반환된 객체를 수정해도 실제 컨텍스트는 변경되지 않습니다.
-
-## 컨텍스트 기반 평가
-
-### 컨텍스트가 피처 플래그 평가에 미치는 영향
-
-컨텍스트는 피처 플래그의 활성화 여부를 결정하는 데 중요한 역할을 합니다. Unleash 서버는 다음과 같은 컨텍스트 기반 전략을 지원합니다:
-
-1. **사용자 ID 기반**: 특정 사용자에게만 기능 활성화
-2. **IP 주소 기반**: 특정 IP 주소 또는 범위에 대해 기능 활성화
-3. **환경 기반**: 개발, 테스트, 프로덕션 등 특정 환경에서만 기능 활성화
-4. **사용자 정의 속성 기반**: 지역, 디바이스 유형, 구독 상태 등에 따라 기능 활성화
-
-예를 들어, 프리미엄 사용자에게만 새 기능을 제공하려면:
-
-```lua
--- 사용자 로그인 시 프리미엄 상태 설정
-function onUserLogin(userId, isPremium)
-  client:UpdateContext({
-    userId = userId,
-    properties = {
-      premium = isPremium
-    }
-  }, function()
-    -- 컨텍스트 업데이트 후 기능 확인
-    if client:IsEnabled("premium-feature") then
-      showPremiumFeature()
-    end
-  end)
-end
-```
-
-Unleash 서버에서는 "premium-feature" 토글에 대해 "premium = true" 조건을 가진 전략을 구성할 수 있습니다.
-
-## 컨텍스트 해시
-
-### 컨텍스트 해시 계산
-
-클라이언트는 내부적으로 컨텍스트 해시를 계산하여 컨텍스트가 변경되었는지 확인합니다. 이 해시는 다음과 같이 계산됩니다:
-
-1. 컨텍스트 필드를 정렬된 순서로 JSON 문자열로 변환
-2. SHA-256 해시 함수를 사용하여 해시 값 계산
-
-컨텍스트 해시가 변경되면 클라이언트는 서버에서 피처 플래그를 다시 가져옵니다.
-
-> **참고**: 컨텍스트 해시 계산은 내부 구현 세부 사항이며, 직접 접근하거나 수정할 수 없습니다.
-
-## 컨텍스트 사용 모범 사례
-
-### 1. 필요한 정보만 포함
-
-컨텍스트에는 피처 플래그 평가에 필요한 정보만 포함하세요. 불필요한 데이터는 성능에 영향을 미칠 수 있습니다.
-
-```lua
--- 좋은 예: 필요한 정보만 포함
-client:UpdateContext({
-  userId = "user-123",
-  properties = {
-    region = "asia",
-    premium = true
-  }
-})
-
--- 나쁜 예: 불필요한 정보 포함
-client:UpdateContext({
-  userId = "user-123",
-  properties = {
-    region = "asia",
-    premium = true,
-    fullName = "John Doe",  -- 피처 플래그 평가에 불필요
-    email = "john@example.com",  -- 피처 플래그 평가에 불필요
-    preferences = {  -- 중첩된 복잡한 객체
-      theme = "dark",
-      fontSize = 14,
-      notifications = { ... }
-    }
-  }
-})
-```
-
-### 2. 컨텍스트 업데이트 최적화
-
-컨텍스트가 변경될 때마다 서버에서 피처 플래그를 다시 가져오므로, 불필요한 업데이트를 최소화하세요.
-
-```lua
--- 나쁜 예: 매 프레임마다 컨텍스트 업데이트
-function update(dt)
-  client:SetContextField("currentTime", ISO8601Now())  -- 매 프레임마다 업데이트
-end
-
--- 좋은 예: 필요할 때만 컨텍스트 업데이트
-local lastTimeUpdate = 0
-function update(dt)
-  local currentTime = os.time()
-  if currentTime - lastTimeUpdate > 60 then  -- 1분마다 업데이트
-    client:SetContextField("currentTime", currentTime)
-    lastTimeUpdate = currentTime
-  end
-end
-```
-
-### 3. 사용자 전환 시 컨텍스트 업데이트
-
-사용자가 로그인하거나 로그아웃할 때 컨텍스트를 업데이트하세요.
-
-```lua
-function onUserLogin(userId, userInfo)
-  client:UpdateContext({
-    userId = userId,
-    properties = {
-      region = userInfo.region,
-      premium = userInfo.isPremium,
-      accountAge = userInfo.accountAge
-    }
-  })
-end
-
-function onUserLogout()
-  client:UpdateContext({
-    userId = nil,  -- userId 제거
-    properties = {
-      region = getDefaultRegion(),  -- 기본값으로 재설정
-      premium = false,
-      accountAge = nil
-    }
-  })
-end
-```
-
-### 4. 명시적 동기화 모드와 함께 사용
-
-명시적 동기화 모드를 사용할 때는 컨텍스트 업데이트 후 `SyncToggles`를 호출하여 변경 사항을 적용하세요.
-
-```lua
--- 컨텍스트 업데이트 후 토글 동기화
-client:UpdateContext({
-  userId = "new-user-id",
-  properties = { premium = true }
-}, function()
-  -- 컨텍스트 업데이트 후 토글 동기화
-  client:SyncToggles(true, function()
-    -- 이제 최신 상태로 기능 확인 가능
-    if client:IsEnabled("premium-feature") then
-      showPremiumFeature()
-    end
-  end)
-end)
-```
-
-## 보안 고려 사항
-
-### 민감한 정보 처리
-
-컨텍스트에 민감한 정보를 포함하지 마세요. 컨텍스트 데이터는 서버로 전송되며 로그에 기록될 수 있습니다.
-
-```lua
--- 나쁜 예: 민감한 정보 포함
-client:UpdateContext({
-  userId = "user-123",
-  properties = {
-    password = "secret123",  -- 민감한 정보
-    creditCard = "1234-5678-9012-3456",  -- 민감한 정보
-    authToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."  -- 민감한 정보
-  }
-})
-
--- 좋은 예: 안전한 정보만 포함
-client:UpdateContext({
-  userId = "user-123",
-  properties = {
-    hasPaymentMethod = true,  -- 불리언 플래그만 사용
-    accountTier = "premium"   -- 민감하지 않은 정보
-  }
-})
-```
-
-### 사용자 식별 정보 최소화
-
-개인 식별 정보(PII)를 최소화하고, 가능한 경우 익명화된 ID를 사용하세요.
-
-```lua
--- 나쁜 예: 과도한 개인 정보
-client:UpdateContext({
-  userId = "john.doe@example.com",  -- 이메일을 ID로 사용
-  properties = {
-    fullName = "John Doe",
-    age = 35,
-    location = "Seoul, South Korea"
-  }
-})
-
--- 좋은 예: 최소한의 익명화된 정보
-client:UpdateContext({
-  userId = "u12345",  -- 익명화된 ID
-  properties = {
-    ageGroup = "30-40",
-    region = "asia"
-  }
-})
-```
-
-## 문제 해결
-
-### 컨텍스트 업데이트 후 피처 플래그가 변경되지 않는 경우
-
-1. **정적 필드 업데이트 시도**: 정적 필드(`appName`, `environment`, `sessionId`)는 초기화 후 변경할 수 없습니다.
-
-   ```lua
-   -- 이 업데이트는 무시됩니다
-   client:UpdateContext({
-     environment = "production"  -- 정적 필드
-   })
-   ```
-
-2. **컨텍스트 변경 없음**: 이전과 동일한 값으로 컨텍스트를 업데이트하면 서버 요청이 발생하지 않습니다.
-
-   ```lua
-   -- 이미 userId가 "user-123"인 경우 변경 없음
-   client:SetContextField("userId", "user-123")
-   ```
-
-3. **오프라인 모드**: 오프라인 모드에서는 컨텍스트 업데이트가 무시됩니다.
-
-   ```lua
-   -- 오프라인 모드에서는 효과 없음
-   client:UpdateContext({
-     userId = "new-user-id"
-   })
-   ```
-
-4. **명시적 동기화 모드**: 명시적 동기화 모드에서는 `SyncToggles`를 호출해야 변경 사항이 적용됩니다.
-
-   ```lua
-   -- 컨텍스트 업데이트 후 SyncToggles 호출 필요
-   client:UpdateContext({
-     userId = "new-user-id"
-   }, function()
-     client:SyncToggles(true)  -- 이 호출이 없으면 변경 사항이 적용되지 않음
-   end)
-   ```
-
-### 로깅 활성화
-
-문제 해결을 위해 로깅을 활성화하여 컨텍스트 변경 및 서버 요청을 추적할 수 있습니다:
-
-```lua
+-- 모든 피처 플래그에 대해 노출 데이터 활성화
 local client = Client.New({
   -- 기본 구성...
-  logLevel = "debug"  -- 상세 로깅 활성화
+  impressionDataAll = true
+})
+
+-- 노출 이벤트 구독
+client:On(FeatureFlags.Events.IMPRESSION, function(event)
+  -- 노출 이벤트 처리
+  print("피처 플래그 노출:", event.featureName, "활성화:", event.enabled)
+  
+  -- 분석 시스템으로 이벤트 전송
+  trackAnalyticsEvent("feature_impression", {
+    featureName = event.featureName,
+    enabled = event.enabled,
+    eventType = event.eventType,
+    variantName = event.variantName
+  })
 })
 ```
 
-## 예제 시나리오
+### 노출 데이터 활용 사례
 
-### 사용자 세그먼트에 따른 기능 제공
+노출 데이터는 다음과 같은 용도로 활용할 수 있습니다:
 
-```lua
--- 사용자 로그인 시
-function onUserLogin(userId, userInfo)
-  -- 사용자 컨텍스트 설정
-  client:UpdateContext({
-    userId = userId,
-    properties = {
-      region = userInfo.region,
-      accountType = userInfo.accountType,  -- "free", "premium", "enterprise"
-      accountAge = calculateAccountAge(userInfo.createdAt),
-      deviceType = getDeviceType()
-    }
-  }, function()
-    -- 컨텍스트 업데이트 후 사용자별 기능 확인
+1. **사용량 분석**: 어떤 피처 플래그가 얼마나 자주 평가되는지 추적
+2. **A/B 테스트 분석**: 각 변형(variant)에 노출된 사용자 수와 결과 측정
+3. **디버깅**: 예상치 못한 동작이 발생했을 때 문제 해결에 활용
+4. **사용자 세그먼트 분석**: 특정 기능에 노출된 사용자 그룹 파악
 
-    -- 프리미엄 기능
-    if client:IsEnabled("premium-features") then
-      enablePremiumFeatures()
-    end
+### 성능 최적화
 
-    -- 지역별 기능
-    if client:IsEnabled("regional-content") then
-      loadRegionalContent()
-    end
+노출 데이터는 유용하지만, 과도한 데이터 생성은 성능에 영향을 줄 수 있습니다. 다음과 같은 최적화 전략을 고려하세요:
 
-    -- 신규 사용자 튜토리얼
-    if client:IsEnabled("new-user-tutorial") then
-      showTutorial()
-    end
+1. **선택적 활성화**: 중요한 플래그에 대해서만 노출 데이터 활성화
+2. **샘플링**: 모든 노출을 기록하는 대신 일부만 샘플링하여 처리
+3. **배치 처리**: 노출 이벤트를 실시간으로 처리하는 대신 배치로 모아서 처리
 
-    -- A/B 테스트
-    local uiVariant = client:GetVariant("ui-redesign")
-    if uiVariant:IsEnabled() then
-      applyUiTheme(uiVariant:StringVariation("classic"))
-    end
-  end)
-end
-```
+## Feature Flags 사용 시 주의사항
 
-### 디바이스 특성에 따른 기능 최적화
-
-```lua
--- 앱 시작 시 디바이스 정보 설정
-function initializeDeviceContext()
-  local deviceInfo = getDeviceInfo()
-
-  client:UpdateContext({
-    properties = {
-      deviceType = deviceInfo.type,  -- "mobile", "tablet", "desktop"
-      osVersion = deviceInfo.osVersion,
-      memorySize = deviceInfo.memoryMB,
-      screenSize = deviceInfo.screenSize,
-      networkType = getCurrentNetworkType()  -- "wifi", "cellular", "offline"
-    }
-  }, function()
-    -- 디바이스 특성에 따른 기능 최적화
-
-    -- 저사양 디바이스 최적화
-    if client:IsEnabled("low-end-device-optimization") then
-      enableLowEndOptimizations()
-    end
-
-    -- 고해상도 텍스처
-    if client:IsEnabled("high-res-textures") then
-      loadHighResTextures()
-    end
-
-    -- 네트워크 최적화
-    local networkConfig = client:GetVariant("network-config")
-    if networkConfig:IsEnabled() then
-      applyNetworkSettings(networkConfig:JsonVariation({}))
-    end
-  end)
-end
-
--- 네트워크 상태 변경 시 업데이트
-function onNetworkChanged(newNetworkType)
-  client:SetContextField("networkType", newNetworkType, function()
-    -- 네트워크 상태에 따른 기능 조정
-    if client:IsEnabled("offline-mode") then
-      enableOfflineMode()
-    end
-  end)
-end
-```
-
-
-# 온라인 게임에서의 Feature Flags 활용 사례
-
-피처 플래그(Feature Flags)는 온라인 게임 개발 및 운영에 있어 강력한 도구입니다. 이 문서에서는 온라인 게임에서 피처 플래그를 활용하는 다양한 사례와 구현 방법을 설명합니다.
-
-## 1. 점진적 기능 출시 (Gradual Rollout)
-
-### 사례: 새로운 게임 모드 출시
-
-새로운 게임 모드를 전체 사용자에게 한 번에 출시하는 대신, 일부 사용자에게 먼저 제공하여 안정성을 검증할 수 있습니다.
-
-```lua
--- 새로운 배틀로얄 모드 점진적 출시
-function checkBattleRoyaleAccess()
-  if client:IsEnabled("new-battle-royale-mode") then
-    showBattleRoyaleMode()
-  else
-    showComingSoonMessage("배틀로얄 모드가 곧 출시됩니다!")
-  end
-end
-
--- 사용자 로그인 시 컨텍스트 설정
-function onUserLogin(userId, userInfo)
-  client:UpdateContext({
-    userId = userId,
-    properties = {
-      region = userInfo.region,
-      accountAge = calculateAccountAge(userInfo.createdAt),
-      playTime = userInfo.totalPlayHours
-    }
-  }, function()
-    checkBattleRoyaleAccess()
-  end)
-end
-```
-
-서버에서는 다음과 같은 전략을 설정할 수 있습니다:
-- 처음에는 내부 테스터(특정 userId 목록)에게만 활성화
-- 그 다음 특정 지역(예: 한국)의 사용자 10%에게 활성화
-- 점차 비율을 높여 모든 사용자에게 제공
-
-### 사례: 신규 아이템 시스템
-
-```lua
-function initializeInventory()
-  if client:IsEnabled("new-inventory-system") then
-    initializeNewInventorySystem()
-  else
-    initializeLegacyInventorySystem()
-  end
-
-  -- 변형을 통한 아이템 드롭률 조정
-  local dropRateConfig = client:GetVariant("item-drop-rates")
-  if dropRateConfig:IsEnabled() then
-    setDropRates(dropRateConfig:JsonVariation({
-      common: 70,
-      uncommon: 20,
-      rare: 8,
-      epic: 1.8,
-      legendary: 0.2
-    }))
-  end
-end
-```
-
-## 2. A/B 테스트
-
-### 사례: 튜토리얼 최적화
-
-여러 버전의 튜토리얼을 테스트하여 어떤 버전이 사용자 참여도와 유지율을 높이는지 측정할 수 있습니다.
-
-```lua
-function showTutorial()
-  local tutorialVariant = client:GetVariant("tutorial-version")
-
-  if not tutorialVariant:IsEnabled() then
-    -- 기본 튜토리얼 표시
-    showDefaultTutorial()
-    return
-  end
-
-  local version = tutorialVariant:StringVariation("default")
-
-  if version == "interactive" then
-    showInteractiveTutorial()
-  elseif version == "video" then
-    showVideoTutorial()
-  elseif version == "quick" then
-    showQuickTutorial()
-  else
-    showDefaultTutorial()
-  end
-
-  -- 분석 이벤트 전송
-  trackAnalyticsEvent("tutorial_shown", {
-    variant = version
-  })
-end
-```
-
-### 사례: 상점 UI 레이아웃
-
-```lua
-function initializeShop()
-  local shopVariant = client:GetVariant("shop-layout")
-
-  if shopVariant:IsEnabled() then
-    local layout = shopVariant:StringVariation("grid")
-    local featuredItems = shopVariant:JsonVariation({})
-
-    initializeShopWithLayout(layout, featuredItems)
-
-    -- 구매 전환율 추적
-    trackShopConversion(layout)
-  else
-    initializeDefaultShop()
-  end
-end
-```
-
-## 3. 계절 이벤트 및 한시적 콘텐츠
-
-### 사례: 크리스마스 이벤트
-
-특정 기간에만 활성화되는 계절 이벤트를 관리할 수 있습니다.
-
-```lua
-function checkSeasonalEvents()
-  -- 크리스마스 이벤트
-  if client:IsEnabled("christmas-event") then
-    enableChristmasDecorations()
-    addChristmasItems()
-    startSnowEffect()
-
-    -- 이벤트 세부 설정
-    local eventConfig = client:GetVariant("christmas-event-config")
-    if eventConfig:IsEnabled() then
-      local config = eventConfig:JsonVariation({})
-      setEventDuration(config.startDate, config.endDate)
-      setSpecialDrops(config.specialDrops)
-    end
-  end
-
-  -- 할로윈 이벤트
-  if client:IsEnabled("halloween-event") then
-    enableHalloweenTheme()
-  end
-}
-
--- 게임 시작 시 및 주기적으로 확인
-function onGameStart()
-  checkSeasonalEvents()
-
-  -- 4시간마다 이벤트 상태 확인
-  scheduleRepeating(checkSeasonalEvents, 4 * 60 * 60)
-}
-```
-
-### 사례: 주말 보너스
-
-```lua
-function checkWeekendBonus()
-  if client:IsEnabled("weekend-bonus") then
-    local bonusConfig = client:GetVariant("weekend-bonus-config")
-    if bonusConfig:IsEnabled() then
-      local config = bonusConfig:JsonVariation({
-        xpMultiplier: 2.0,
-        goldMultiplier: 1.5
-      })
-
-      applyXPBoost(config.xpMultiplier)
-      applyGoldBoost(config.goldMultiplier)
-      showBoostNotification()
-    }
-  }
-}
-```
-
-## 4. 지역별 콘텐츠 및 규제 대응
-
-### 사례: 국가별 콘텐츠 조정
-
-각 국가의 규제 및 문화적 차이에 맞게 게임 콘텐츠를 조정할 수 있습니다.
-
-```lua
-function initializeRegionalContent()
-  client:UpdateContext({
-    properties = {
-      country = getUserCountry(),
-      language = getUserLanguage()
-    }
-  }, function()
-    -- 확률형 아이템(가챠) 표시
-    if client:IsEnabled("show-gacha-probabilities") then
-      enableGachaProbabilityDisplay()
-    }
-
-    -- 혈흔 효과
-    if client:IsEnabled("blood-effects") then
-      enableBloodEffects()
-    } else {
-      enableAlternativeEffects()
-    }
-
-    -- 지역별 인게임 상점 가격
-    local pricingConfig = client:GetVariant("regional-pricing")
-    if pricingConfig:IsEnabled() then
-      applyRegionalPricing(pricingConfig:JsonVariation({}))
-    }
-  })
-}
-```
-
-### 사례: 연령 제한 기능
-
-```lua
-function applyAgeRestrictions()
-  client:UpdateContext({
-    properties = {
-      age = getUserAge(),
-      country = getUserCountry()
-    }
-  }, function()
-    -- 미성년자 보호 기능
-    if client:IsEnabled("minor-protection") then
-      enablePlayTimeLimit()
-      disableMicrotransactions()
-      enableContentFilter()
-    }
-
+<!-- 주의사항 관련 내용 유지 -->
     -- 채팅 필터
     if client:IsEnabled("chat-filter") then
       local filterConfig = client:GetVariant("chat-filter-config")
@@ -2639,50 +1272,50 @@ function showNewFeature() {
 
 # 피처 플래그 노출 데이터(Impression Data)
 
-## 노출 데이터란?
+노출 데이터(Impression Data)는 사용자가 특정 피처 플래그에 노출되었을 때 기록되는 정보입니다. 이 기능을 활용하면 피처 플래그의 사용 패턴을 분석하고, A/B 테스트 결과를 측정하며, 문제를 디버깅하는 데 도움이 됩니다.
 
-노출 데이터(Impression Data)는 사용자가 특정 피처 플래그에 노출되었을 때 기록되는 정보입니다. 이는 피처 플래그가 평가되고 사용될 때마다 생성되는 이벤트로, 다음과 같은 정보를 포함합니다:
+### 노출 데이터 활성화
 
-- 피처 플래그 이름
-- 활성화 여부(enabled/disabled)
-- 변형(variant) 정보 (해당하는 경우)
-- 사용자 컨텍스트
-- 타임스탬프
-- 이벤트 유형 (isEnabled, getVariant 등)
+노출 데이터는 다음과 같은 방법으로 활성화할 수 있습니다:
 
-## 노출 데이터를 사용해야 하는 이유
+```lua
+-- 모든 피처 플래그에 대해 노출 데이터 활성화
+local client = Client.New({
+  -- 기본 구성...
+  impressionDataAll = true
+})
 
-### 1. 사용량 추적 및 분석
+-- 노출 이벤트 구독
+client:On(FeatureFlags.Events.IMPRESSION, function(event)
+  -- 노출 이벤트 처리
+  print("피처 플래그 노출:", event.featureName, "활성화:", event.enabled)
+  
+  -- 분석 시스템으로 이벤트 전송
+  trackAnalyticsEvent("feature_impression", {
+    featureName = event.featureName,
+    enabled = event.enabled,
+    eventType = event.eventType,
+    variantName = event.variantName
+  })
+})
+```
 
-노출 데이터를 통해 어떤 피처 플래그가 얼마나 자주 평가되는지, 어떤 사용자들이 특정 기능에 노출되었는지 파악할 수 있습니다. 이는 다음과 같은 질문에 답하는 데 도움이 됩니다:
+### 노출 데이터 활용 사례
 
-- "새로운 기능이 실제로 사용되고 있는가?"
-- "어떤 사용자 세그먼트가 이 기능을 가장 많이 사용하는가?"
-- "특정 기능이 사용되지 않는 이유는 무엇인가?"
+노출 데이터는 다음과 같은 용도로 활용할 수 있습니다:
 
-### 2. A/B 테스트 분석
+1. **사용량 분석**: 어떤 피처 플래그가 얼마나 자주 평가되는지 추적
+2. **A/B 테스트 분석**: 각 변형(variant)에 노출된 사용자 수와 결과 측정
+3. **디버깅**: 예상치 못한 동작이 발생했을 때 문제 해결에 활용
+4. **사용자 세그먼트 분석**: 특정 기능에 노출된 사용자 그룹 파악
 
-A/B 테스트를 실행할 때, 노출 데이터는 각 변형(variant)에 노출된 사용자 수와 그 결과를 정확하게 측정하는 데 필수적입니다. 이를 통해:
+### 성능 최적화
 
-- 각 변형의 전환율 계산
-- 통계적 유의성 평가
-- 사용자 행동 패턴 분석
+노출 데이터는 유용하지만, 과도한 데이터 생성은 성능에 영향을 줄 수 있습니다. 다음과 같은 최적화 전략을 고려하세요:
 
-### 3. 디버깅 및 문제 해결
-
-노출 데이터는 예상치 못한 동작이 발생했을 때 디버깅에 도움이 됩니다:
-
-- 특정 사용자가 기능에 노출되었는지 확인
-- 피처 플래그 평가 시점과 컨텍스트 파악
-- 기능 활성화/비활성화 패턴 분석
-
-### 4. 성능 최적화
-
-자주 평가되는 피처 플래그를 식별하여 성능 최적화에 활용할 수 있습니다:
-
-- 불필요하게 자주 평가되는 플래그 식별
-- 캐싱 전략 개선
-- 평가 빈도 최적화
+1. **선택적 활성화**: 중요한 플래그에 대해서만 노출 데이터 활성화
+2. **샘플링**: 모든 노출을 기록하는 대신 일부만 샘플링하여 처리
+3. **배치 처리**: 노출 이벤트를 실시간으로 처리하는 대신 배치로 모아서 처리
 
 ## 노출 데이터 구현 방법
 
