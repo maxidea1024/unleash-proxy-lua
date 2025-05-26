@@ -1,4 +1,4 @@
-local Util = require("framework.3rdparty.feature-flags.util")
+local Util = require("framework.3rdparty.unleash.util")
 
 local ErrorHelper = {}
 

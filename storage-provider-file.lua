@@ -1,5 +1,5 @@
-local Json = require("framework.3rdparty.feature-flags.dkjson")
-local Util = require("framework.3rdparty.feature-flags.util")
+local Json = require("framework.3rdparty.unleash.dkjson")
+local Util = require("framework.3rdparty.unleash.util")
 
 local FileStorageProvider = {}
 FileStorageProvider.__index = FileStorageProvider
@@ -10,7 +10,7 @@ function FileStorageProvider.New(backupPath, prefix, loggerFactory)
   local self = setmetatable({}, FileStorageProvider)
   self.backupPath = backupPath or Util.GetTempDir()
   self.prefix = prefix or ""
-  self.logger = loggerFactory:CreateLogger("UnleashFileStorageProvider")
+  self.logger = loggerFactory:CreateLogger("FileStorageProvider")
   return self
 end
 

@@ -1,4 +1,4 @@
-local ErrorTypes = require("framework.3rdparty.feature-flags.error-types")
+local ErrorTypes = require("framework.3rdparty.unleash.error-types")
 
 local PREFIX = "__listener__"
 local PREFIX_LENGTH = #PREFIX
@@ -45,7 +45,7 @@ end
 function EventEmitter.New(config)
   local self = {}
 
-  self.logger = config.loggerFactory:CreateLogger("UnleashEventEmitter")
+  self.logger = config.loggerFactory:CreateLogger("EventEmitter")
   self.client = config.client
   self.on = {}
   self.currentMaxListeners = DEFAULT_MAX_LISTENERS

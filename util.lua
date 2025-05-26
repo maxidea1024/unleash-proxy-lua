@@ -1,5 +1,5 @@
-local json = require("framework.3rdparty.feature-flags.dkjson")
-local sha2 = require("framework.3rdparty.feature-flags.sha2")
+local json = require("framework.3rdparty.unleash.dkjson")
+local sha2 = require("framework.3rdparty.unleash.sha2")
 
 local function UrlEncode(str)
   if str then

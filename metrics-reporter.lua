@@ -1,11 +1,11 @@
 -- TODO backoff 처리
 
-local json = require("framework.3rdparty.feature-flags.dkjson")
-local util = require("framework.3rdparty.feature-flags.util")
-local logger = require("framework.3rdparty.feature-flags.logger")
-local ErrorTypes = require("framework.3rdparty.feature-flags.error-types")
-local ErrorHelper = require("framework.3rdparty.feature-flags.error-helper")
-local Validation = require("framework.3rdparty.feature-flags.validation")
+local Json = require("framework.3rdparty.unleash.dkjson")
+local Util = require("framework.3rdparty.unleash.util")
+local Logging = require("framework.3rdparty.unleash.logging")
+local ErrorTypes = require("framework.3rdparty.unleash.error-types")
+local ErrorHelper = require("framework.3rdparty.unleash.error-helper")
+local Validation = require("framework.3rdparty.unleash.validation")
 
 local MetricsReporter = {}
 MetricsReporter.__index = MetricsReporter
@@ -41,7 +41,7 @@ function MetricsReporter.New(config)
   end
 
   local self = setmetatable({}, MetricsReporter)
-  self.logger = config.loggerFactory:CreateLogger("UnleashMetricsReporter")
+  self.logger = config.loggerFactory:CreateLogger("MetricsReporter")
   self.client = config.client
   self.onSent = config.onSent or function() end
   self.disabled = config.disableMetrics or false
@@ -106,7 +106,7 @@ end
 
 function MetricsReporter:createEmptyBucket()
   return {
-    start = util.Iso8601UtcNowWithMSec(),
+    start = Util.Iso8601UtcNowWithMSec(),
     stop = nil,
     toggles = {},
   }
@@ -137,28 +137,28 @@ function MetricsReporter:SendMetrics()
   local url = self.url .. "/client/metrics"
   local payload = self:getPayload()
 
-  if util.IsEmptyTable(payload.bucket.toggles) then
+  if Util.IsEmptyTable(payload.bucket.toggles) then
     return
   end
 
   local headers = self:getHeaders()
 
-  if self.logger:IsEnabled(logger.LogLevel.Debug) then
-    self.logger:Debug("Sending metrics: " .. json.encode({
+  if self.logger:IsEnabled(Logging.LogLevel.Debug) then
+    self.logger:Debug("Sending metrics: " .. Json.encode({
       url = url,
       headers = headers,
       payload = payload,
     }))
   end
 
-  local success, jsonBody = pcall(json.encode, payload)
+  local success, jsonBody = pcall(Json.encode, payload)
   if not success then
     self.client:emitError(
       ErrorTypes.JSON_ERROR,
       "Failed to encode metrics JSON: " .. tostring(jsonBody),
       "MetricsReporter:SendMetrics",
-      logger.LogLevel.Error,
-      util.MergeTable({
+      Logging.LogLevel.Error,
+      Util.MergeTable({
         payload = payload,
         errorMessage = tostring(jsonBody)
       }, ErrorHelper.GetJsonEncodingErrorDetail(tostring(jsonBody), "payload"))
@@ -181,7 +181,7 @@ function MetricsReporter:SendMetrics()
         ErrorTypes.HTTP_ERROR,
         "Failed to send metrics: " .. response.status,
         "MetricsReporter:SendMetrics",
-        logger.LogLevel.Error,
+        Logging.LogLevel.Error,
         ErrorHelper.BuildHttpErrorDetail(url, response.status, {
           context = "metrics",
           responseBody = response.body,
@@ -240,7 +240,7 @@ function MetricsReporter:getPayload()
   -- take
   local bucket = {
     start = self.bucket.start,
-    stop = util.Iso8601UtcNowWithMSec(),
+    stop = Util.Iso8601UtcNowWithMSec(),
     toggles = self.bucket.toggles,
   }
 

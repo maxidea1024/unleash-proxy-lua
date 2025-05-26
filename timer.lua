@@ -1,8 +1,8 @@
 local Timer = {}
 Timer.__index = Timer
 
-local ErrorTypes = require("framework.3rdparty.feature-flags.error-types")
-local Logger = require("framework.3rdparty.feature-flags.logger")
+local ErrorTypes = require("framework.3rdparty.unleash.error-types")
+local Logging = require("framework.3rdparty.unleash.logging")
 
 function Timer.New(loggerFactory, client)
   if not loggerFactory then error("`loggerFactory` is required") end
@@ -11,14 +11,15 @@ function Timer.New(loggerFactory, client)
   local self = setmetatable({}, Timer)
   self.timers = {}
   self.co_pool = setmetatable({}, { __mode = "kv" })
-  self.logger = loggerFactory:CreateLogger("UnleashTimer")
+  self.logger = loggerFactory:CreateLogger("Timer")
   self.nextTimerId = 1
   self.client = client
   return self
 end
 
 function Timer:insertTimer(sec, fn)
-  local expireAt = os.clock() + sec
+  local now = os.clock()
+  local expireAt = now + sec
   local pos = 1
   for i, v in ipairs(self.timers) do
     if v.expireAt > expireAt then
@@ -67,9 +68,52 @@ function Timer:Async(fn)
   return co
 end
 
-function Timer:Timeout(seconds, fn)
+function Timer:SetTimeout(seconds, fn)
   local timer = self:insertTimer(seconds, fn)
   return timer
+end
+
+function Timer:SetInterval(seconds, fn)
+  local context
+  local function intervalFn()
+    if not context or context.canceled then return end
+
+    -- Execute the function
+    local ok, err = xpcall(fn, debug.traceback)
+    if not ok then
+      self.client:emitError(
+        ErrorTypes.TIMER_ERROR,
+        "Timer interval execution failed: " .. tostring(err),
+        "Timer:SetInterval",
+        Logging.LogLevel.Error,
+        {
+          timerId = context.id,
+          stackTrace = err,
+          prevention = "Ensure interval callbacks handle all possible error cases.",
+          solution = "Review the interval callback implementation and add proper error handling.",
+          troubleshooting = {
+            "1. Check for nil values in the interval callback",
+            "2. Ensure all required resources are available when the interval executes",
+            "3. Add pcall/xpcall within the interval callback for critical operations"
+          }
+        }
+      )
+    end
+
+    -- Schedule the next execution if not canceled
+    if not context.canceled then
+      context = self:insertTimer(seconds, intervalFn)
+    end
+  end
+
+  -- Start the interval
+  context = self:insertTimer(seconds, intervalFn)
+  return context
+end
+
+-- Alias for backward compatibility
+function Timer:Timeout(seconds, fn)
+  return self:SetTimeout(seconds, fn)
 end
 
 function Timer:Sleep(seconds)
@@ -108,7 +152,7 @@ function Timer:Tick()
             ErrorTypes.TIMER_ERROR,
             "Timer execution failed: " .. tostring(err),
             "Timer:Tick",
-            Logger.LogLevel.Error,
+            Logging.LogLevel.Error,
             {
               timerId = timer.id,
               stackTrace = err,

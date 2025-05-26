@@ -40,4 +40,3 @@ local ErrorTypes = {
 }
 
 return ErrorTypes
-

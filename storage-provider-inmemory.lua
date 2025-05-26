@@ -6,7 +6,7 @@ function InMemoryStorageProvider.New(loggerFactory)
 
   local self = setmetatable({}, InMemoryStorageProvider)
   self.store = {}
-  self.logger = loggerFactory:CreateLogger("UnleashInMemoryStorageProvider")
+  self.logger = loggerFactory:CreateLogger("InMemoryStorageProvider")
   return self
 end
 

@@ -1,15 +1,17 @@
-local Client = require("framework.3rdparty.feature-flags.client")
-local InMemoryStorageProvider = require("framework.3rdparty.feature-flags.storage-provider-inmemory")
-local FileStorageProvider = require("framework.3rdparty.feature-flags.storage-provider-file")
-local Events = require("framework.3rdparty.feature-flags.events")
-local Logger = require("framework.3rdparty.feature-flags.logger")
-local ClientConfigBuilder = require("framework.3rdparty.feature-flags.client-config-builder")
+local UnleashClient = require("framework.3rdparty.unleash.unleash-client")
+local UnleashConfigBuilder = require("framework.3rdparty.unleash.unleash-config-builder")
+local InMemoryStorageProvider = require("framework.3rdparty.unleash.storage-provider-inmemory")
+local FileStorageProvider = require("framework.3rdparty.unleash.storage-provider-file")
+local Events = require("framework.3rdparty.unleash.events")
+local Logging = require("framework.3rdparty.unleash.logging")
+local Util = require("framework.3rdparty.unleash.util")
 
 return {
-  Client = Client,
+  UnleashClient = UnleashClient,
+  UnleashConfigBuilder = UnleashConfigBuilder,
   InMemoryStorageProvider = InMemoryStorageProvider,
   FileStorageProvider = FileStorageProvider,
   Events = Events,
-  Logger = Logger,
-  ClientConfigBuilder = ClientConfigBuilder
+  Logging = Logging,
+  Util = Util,
 }

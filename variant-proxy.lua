@@ -1,6 +1,6 @@
-local json = require("framework.3rdparty.feature-flags.dkjson")
-local Validation = require("framework.3rdparty.feature-flags.validation")
-local ErrorTypes = require("framework.3rdparty.feature-flags.error-types")
+local Json = require("framework.3rdparty.unleash.dkjson")
+local Validation = require("framework.3rdparty.unleash.validation")
+local ErrorTypes = require("framework.3rdparty.unleash.error-types")
 
 local VariantProxy = {}
 VariantProxy.__index = VariantProxy
@@ -16,18 +16,21 @@ local DEFAULT_VALUES = {
 -- Helper function to handle payload validation
 local function validatePayload(self, expectedType, defaultValue)
   if not self.rawVariant or not self.rawVariant.payload then
-    self.client.logger:Warn("No valid payload found for feature `%s`", self.featureName)
+    -- TODO 로그로 출력하지 말고, detail 결과로 반환하는게 안지저분할듯
+    -- self.client.logger:Warn("No valid payload found for feature `%s`", self.featureName)
     return false, defaultValue
   end
 
   if self.rawVariant.payload.type ~= expectedType then
-    self.client.logger:Warn("Expected `%s` payload for feature `%s` but got `%s`",
-      expectedType, self.featureName, self.rawVariant.payload.type or "nil")
+    -- TODO 로그로 출력하지 말고, detail 결과로 반환하는게 안지저분할듯
+    -- self.client.logger:Warn("Expected `%s` payload for feature `%s` but got `%s`",
+    --   expectedType, self.featureName, self.rawVariant.payload.type or "nil")
     return false, defaultValue
   end
 
   if self.rawVariant.payload.value == nil then
-    self.client.logger:Warn("Empty %s payload for feature `%s`", expectedType, self.featureName)
+    -- TODO 로그로 출력하지 말고, detail 결과로 반환하는게 안지저분할듯
+    -- self.client.logger:Warn("Empty %s payload for feature `%s`", expectedType, self.featureName)
     return false, defaultValue
   end
 
@@ -50,16 +53,16 @@ function VariantProxy:FeatureName()
   return self.featureName
 end
 
-function VariantProxy:VariantName()
-  return self.rawVariant.name or "default"
+function VariantProxy:VariantName(defaultVariantName)
+  return self.rawVariant.name or defaultVariantName or "disabled"
 end
 
 function VariantProxy:RawVariant()
   return self.rawVariant
 end
 
-function VariantProxy:IsEnabled(defaultValue)
-  return self.rawVariant.feature_enabled or defaultValue or DEFAULT_VALUES.BOOLEAN
+function VariantProxy:IsEnabled()
+  return self.rawVariant.feature_enabled or DEFAULT_VALUES.BOOLEAN
 end
 
 function VariantProxy:BoolVariation(defaultValue)
@@ -83,6 +86,8 @@ function VariantProxy:NumberVariation(defaultValue)
   if numSuccess and numValue then
     return numValue
   else
+    -- TODO 로그로 출력하지 말고, detail 결과로 반환하는게 안지저분할듯
+
     self.client.logger:Warn("Failed to convert value to number for feature `%s`: %s",
       self.featureName, tostring(payloadValue))
 
@@ -129,10 +134,12 @@ function VariantProxy:JsonVariation(defaultValue)
   end
 
   local success, result = pcall(function()
-    return json.decode(payloadValue)
+    return Json.decode(payloadValue)
   end)
 
   if not success or not result then
+    -- TODO 로그로 출력하지 말고, detail 결과로 반환하는게 안지저분할듯
+
     self.client.logger:Warn("Failed to decode JSON for feature `%s`: %s", self.featureName, tostring(result))
 
     self.client:emitError(
@@ -155,65 +162,65 @@ function VariantProxy:JsonVariation(defaultValue)
   return result
 end
 
+-- TODO 이름이 모호해서 일단은 기능을 막아둠.
+-- function VariantProxy:Variation(defaultValue)
+--   if not self.rawVariant or not self.rawVariant.payload then
+--     return defaultValue
+--   end
+
+--   local payloadType = self.rawVariant.payload.type
+
+--   if payloadType == "boolean" then
+--     if type(defaultValue) ~= "boolean" then
+--       self.client.logger:Warn("Expected `boolean` default value for feature `%s`, got `%s`",
+--         self.featureName, type(defaultValue))
+--       defaultValue = DEFAULT_VALUES.BOOLEAN
+--     end
+--     return self:BoolVariation(defaultValue)
+--   elseif payloadType == "number" then
+--     if type(defaultValue) ~= "number" then
+--       self.client.logger:Warn("Expected `number` default value for feature `%s`, got `%s`",
+--         self.featureName, type(defaultValue))
+--       defaultValue = DEFAULT_VALUES.NUMBER
+--     end
+--     return self:NumberVariation(defaultValue)
+--   elseif payloadType == "string" then
+--     if type(defaultValue) ~= "string" then
+--       self.client.logger:Warn("Expected `string` default value for feature `%s`, got `%s`",
+--         self.featureName, type(defaultValue))
+--       defaultValue = DEFAULT_VALUES.STRING
+--     end
+--     return self:StringVariation(defaultValue)
+--   elseif payloadType == "json" then
+--     if type(defaultValue) ~= "table" then
+--       self.client.logger:Warn("Expected `table` default value for feature `%s`, got `%s`",
+--         self.featureName, type(defaultValue))
+--       defaultValue = DEFAULT_VALUES.TABLE
+--     end
+--     return self:JsonVariation(defaultValue)
+--   else
+--     self.client.logger:Warn("Unknown payload type `%s` for feature `%s`",
+--       payloadType or "nil", self.featureName)
+
+--     self.client:emitError(
+--       ErrorTypes.INVALID_PAYLOAD_TYPE,
+--       "Unknown payload type",
+--       "VariantProxy:GetVariation",
+--       nil,
+--       {
+--         featureName = self.featureName,
+--         payloadType = payloadType or "nil",
+--         prevention = "Use only supported payload types: boolean, number, string, json.",
+--         solution = "Check the feature flag configuration and correct the payload type."
+--       }
+--     )
+
+--     return defaultValue
+--   end
+-- end
+
 function VariantProxy:GetPayloadType()
   return self.rawVariant.payload and self.rawVariant.payload.type or "<none>"
-end
-
--- Convenience method to get any type of variation based on payload type
-function VariantProxy:GetVariation(defaultValue)
-  if not self.rawVariant or not self.rawVariant.payload then
-    return defaultValue
-  end
-
-  local payloadType = self.rawVariant.payload.type
-
-  if payloadType == "boolean" then
-    if type(defaultValue) ~= "boolean" then
-      self.client.logger:Warn("Expected `boolean` default value for feature `%s`, got `%s`",
-        self.featureName, type(defaultValue))
-      defaultValue = DEFAULT_VALUES.BOOLEAN
-    end
-    return self:BoolVariation(defaultValue)
-  elseif payloadType == "number" then
-    if type(defaultValue) ~= "number" then
-      self.client.logger:Warn("Expected `number` default value for feature `%s`, got `%s`",
-        self.featureName, type(defaultValue))
-      defaultValue = DEFAULT_VALUES.NUMBER
-    end
-    return self:NumberVariation(defaultValue)
-  elseif payloadType == "string" then
-    if type(defaultValue) ~= "string" then
-      self.client.logger:Warn("Expected `string` default value for feature `%s`, got `%s`",
-        self.featureName, type(defaultValue))
-      defaultValue = DEFAULT_VALUES.STRING
-    end
-    return self:StringVariation(defaultValue)
-  elseif payloadType == "json" then
-    if type(defaultValue) ~= "table" then
-      self.client.logger:Warn("Expected `table` default value for feature `%s`, got `%s`",
-        self.featureName, type(defaultValue))
-      defaultValue = DEFAULT_VALUES.TABLE
-    end
-    return self:JsonVariation(defaultValue)
-  else
-    self.client.logger:Warn("Unknown payload type `%s` for feature `%s`",
-      payloadType or "nil", self.featureName)
-
-    self.client:emitError(
-      ErrorTypes.INVALID_PAYLOAD_TYPE,
-      "Unknown payload type",
-      "VariantProxy:GetVariation",
-      nil,
-      {
-        featureName = self.featureName,
-        payloadType = payloadType or "nil",
-        prevention = "Use only supported payload types: boolean, number, string, json.",
-        solution = "Check the feature flag configuration and correct the payload type."
-      }
-    )
-
-    return defaultValue
-  end
 end
 
 -- Cache for variant proxies to avoid creating new objects for the same feature/variant

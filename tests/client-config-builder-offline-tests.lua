@@ -1,5 +1,5 @@
-local ClientConfigBuilder = require("framework.3rdparty.feature-flags.client-config-builder")
-local Client = require("framework.3rdparty.feature-flags.client")
+local UnleashConfigBuilder = require("framework.3rdparty.unleash.unleash-config-builder")
+local UnleashClient = require("framework.3rdparty.unleash.unleash-client")
 
 -- Test helper functions
 local function assertNotNil(value, message)
@@ -45,7 +45,7 @@ local tests = {}
 function tests.testBasicOfflineConfig()
   print("Running test: Basic offline configuration")
 
-  local config = ClientConfigBuilder.New("test-app")
+  local config = UnleashConfigBuilder.New("test-app")
       :Offline(true)
       :Bootstrap(sampleBootstrap)
       :Build()
@@ -62,7 +62,7 @@ function tests.testOfflineModeRequiresBootstrap()
   print("Running test: Offline mode requires bootstrap data")
 
   assertError("Bootstrap data is required in offline mode", function()
-    ClientConfigBuilder.New("test-app")
+    UnleashConfigBuilder.New("test-app")
         :Offline(true)
         :Build()
   end)
@@ -72,7 +72,7 @@ end
 function tests.testOfflineModeWithDevMode()
   print("Running test: Offline mode with development mode")
 
-  local config = ClientConfigBuilder.New("test-app")
+  local config = UnleashConfigBuilder.New("test-app")
       :Offline(true)
       :Bootstrap(sampleBootstrap)
       :DevMode(true)
@@ -98,7 +98,7 @@ function tests.testOfflineModeWithCustomLogger()
     end
   }
 
-  local config = ClientConfigBuilder.New("test-app")
+  local config = UnleashConfigBuilder.New("test-app")
       :Offline(true)
       :Bootstrap(sampleBootstrap)
       :LoggerFactory(mockLoggerFactory)
@@ -111,7 +111,7 @@ end
 function tests.testOfflineModeWithLogLevel()
   print("Running test: Offline mode with log level")
 
-  local config = ClientConfigBuilder.New("test-app")
+  local config = UnleashConfigBuilder.New("test-app")
       :Offline(true)
       :Bootstrap(sampleBootstrap)
       :LogLevel("debug")
@@ -131,7 +131,7 @@ function tests.testOfflineModeWithCustomStorage()
     Delete = function() return true end
   }
 
-  local config = ClientConfigBuilder.New("test-app")
+  local config = UnleashConfigBuilder.New("test-app")
       :Offline(true)
       :Bootstrap(sampleBootstrap)
       :StorageProvider(mockStorageProvider)
@@ -144,7 +144,7 @@ end
 function tests.testOfflineModeWithBootstrapOverride()
   print("Running test: Offline mode with bootstrap override")
 
-  local config = ClientConfigBuilder.New("test-app")
+  local config = UnleashConfigBuilder.New("test-app")
       :Offline(true)
       :Bootstrap(sampleBootstrap)
       :BootstrapOverride(true)
@@ -157,7 +157,7 @@ end
 function tests.testOfflineModeWithMetricsDisabled()
   print("Running test: Offline mode with metrics disabled")
 
-  local config = ClientConfigBuilder.New("test-app")
+  local config = UnleashConfigBuilder.New("test-app")
       :Offline(true)
       :Bootstrap(sampleBootstrap)
       :DisableMetrics(true)
@@ -170,7 +170,7 @@ end
 function tests.testOfflineModeWithImpressionData()
   print("Running test: Offline mode with impression data")
 
-  local config = ClientConfigBuilder.New("test-app")
+  local config = UnleashConfigBuilder.New("test-app")
       :Offline(true)
       :Bootstrap(sampleBootstrap)
       :ImpressionDataAll(true)
@@ -192,7 +192,7 @@ function tests.testOfflineModeWithContext()
     }
   }
 
-  local config = ClientConfigBuilder.New("test-app")
+  local config = UnleashConfigBuilder.New("test-app")
       :Offline(true)
       :Bootstrap(sampleBootstrap)
       :Context(testContext)
@@ -211,7 +211,7 @@ function tests.testOfflineModeWithExperimental()
     featureY = false
   }
 
-  local config = ClientConfigBuilder.New("test-app")
+  local config = UnleashConfigBuilder.New("test-app")
       :Offline(true)
       :Bootstrap(sampleBootstrap)
       :Experimental(experimental)
@@ -225,7 +225,7 @@ end
 function tests.testOfflineModeWithTogglesStorageTTL()
   print("Running test: Offline mode with toggles storage TTL")
 
-  local config = ClientConfigBuilder.New("test-app")
+  local config = UnleashConfigBuilder.New("test-app")
       :Offline(true)
       :Bootstrap(sampleBootstrap)
       :TogglesStorageTTL(3600)
@@ -239,16 +239,16 @@ end
 function tests.testCreateClientWithOfflineConfig()
   print("Running test: Create client with offline config")
 
-  local config = ClientConfigBuilder.New("test-app")
+  local config = UnleashConfigBuilder.New("test-app")
       :Offline(true)
       :Bootstrap(sampleBootstrap)
       :Build()
 
-  local client = Client.New(config)
-  assertNotNil(client, "Client should be created")
+  local client = UnleashClient.New(config)
+  assertNotNil(client, "UnleashClient should be created")
 
   -- Test client is ready immediately in offline mode
-  assertEquals(true, client:IsReady(), "Client should be ready immediately in offline mode")
+  assertEquals(true, client:IsReady(), "UnleashClient should be ready immediately in offline mode")
 
   -- Test feature flags from bootstrap
   assertEquals(true, client:IsEnabled("feature-a"), "Feature A should be enabled")
@@ -264,7 +264,7 @@ end
 
 -- Run all tests
 local function runAllTests()
-  print("=== Running ClientConfigBuilder Offline Mode Tests ===")
+  print("=== Running UnleashConfigBuilder Offline Mode Tests ===")
   local passedCount = 0
   local failedCount = 0
 

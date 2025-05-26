@@ -161,7 +161,7 @@ function Validation.RequireInstance(value, class, paramName, functionName)
     error(string.format("`%s` must be a table in `%s`, got `%s`",
       paramName, functionName, type(value)))
   end
-  
+
   local mt = getmetatable(value)
   if mt ~= class then
     local className = "unknown"
@@ -170,11 +170,11 @@ function Validation.RequireInstance(value, class, paramName, functionName)
     elseif type(class) == "string" then
       className = class
     end
-    
+
     error(string.format("`%s` must be an instance of `%s` in `%s`",
       paramName, className, functionName))
   end
-  
+
   return value
 end
 

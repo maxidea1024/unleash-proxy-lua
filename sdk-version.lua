@@ -1,1 +1,1 @@
-return "unleash-client-lua:1.0.0"
+return "unleash-frontend-sdk-lua:1.0.0"

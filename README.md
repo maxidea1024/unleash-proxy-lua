@@ -16,20 +16,20 @@ Lua 애플리케이션을 위한 피처 플래그 클라이언트로, Unleash �
 
 ## 설치
 
-Lua 프로젝트에 `togglit` 모듈을 포함하세요:
+Lua 프로젝트에 `unleash` 모듈을 포함하세요:
 
 ```lua
-local FeatureFlags = require("framework.3rdparty.togglit.index")
+local Unleash = require("framework.3rdparty.unleash.index")
 ```
 
 ## 초기화
 
 ```lua
-local FeatureFlags = require("framework.3rdparty.togglit.togglit")
-local Client = FeatureFlags.Client
+local Unleash = require("framework.3rdparty.unleash.index")
+local UnleashClient = Unleash.UnleashClient
 
 -- 클라이언트 초기화
-local client = Client.New({
+local client = UnleashClient.New({
   url = "https://unleash.example.com/api",
   clientKey = "your-client-key",
   appName = "your-app-name",
@@ -44,7 +44,7 @@ local client = Client.New({
 선택적 매개변수:
 
 ```lua
-local client = Client.New({
+local client = UnleashClient.New({
   -- 필수 매개변수
   url = "https://unleash.example.com/api",
   clientKey = "your-client-key",
@@ -120,7 +120,7 @@ end)
 ### 1. 서버 연결 전 초기 상태 제공
 
 ```lua
-local client = Client.New({
+local client = UnleashClient.New({
   -- 기본 구성...
   bootstrap = initialFeatureFlags,
   disableAutoStart = true  -- 자동 시작 비활성화
@@ -140,7 +140,7 @@ end)
 ### 2. 서버 다운타임 대비
 
 ```lua
-local client = Client.New({
+local client = UnleashClient.New({
   -- 기본 구성...
   bootstrap = initialFeatureFlags,
   bootstrapOverride = false  -- 저장된 값이 있으면 사용
@@ -181,7 +181,7 @@ local devBootstrap = {
 ### 명시적 동기화 모드 활성화
 
 ```lua
-local client = Client.New({
+local client = UnleashClient.New({
   url = "https://unleash.example.com/api",
   clientKey = "your-client-key",
   appName = "your-app-name",
@@ -201,7 +201,7 @@ local client = Client.New({
 ### 초기화 시 컨텍스트 설정
 
 ```lua
-local client = Client.New({
+local client = UnleashClient.New({
   url = "https://unleash.example.com/api",
   clientKey = "your-client-key",
   appName = "your-app-name",  -- 정적 필드
@@ -233,7 +233,7 @@ local client = Client.New({
 
 ```lua
 -- 모든 피처 플래그에 대해 노출 데이터 활성화
-local client = Client.New({
+local client = UnleashClient.New({
   -- 기본 구성...
   impressionDataAll = true
 })
@@ -476,7 +476,7 @@ function optimizeNetworkSettings()
 
 ```lua
 -- 명시적 동기화 모드로 클라이언트 초기화
-local client = Client.New({
+local client = UnleashClient.New({
   -- 기본 구성...
   useExplicitSyncMode = true
 })
@@ -572,7 +572,7 @@ local offlineFeatureFlags = {
 function initializeFeatureFlags()
   local isOnline = checkNetworkConnection()
 
-  local client = Client.New({
+  local client = UnleashClient.New({
     url = "https://unleash.example.com/api",
     clientKey = "your-client-key",
     appName = "your-game-name",
@@ -615,7 +615,7 @@ function quickStartGame()
     }
   }
 
-  local client = Client.New({
+  local client = UnleashClient.New({
     -- 기본 구성...
     bootstrap = defaultFeatureFlags,
     bootstrapOverride = false  -- 서버에서 가져온 값으로 나중에 덮어씀
@@ -954,7 +954,7 @@ function onFeatureFlagsUpdated()
 
 ```lua
 -- 좋은 예: 명시적 동기화 모드로 변경 시점 제어
-local client = Client.New({
+local client = UnleashClient.New({
   -- 기본 구성...
   useExplicitSyncMode = true
 })
@@ -1130,7 +1130,7 @@ local defaultFeatureFlags = {
   }
 }
 
-local client = Client.New({
+local client = UnleashClient.New({
   -- 기본 구성...
   bootstrap = defaultFeatureFlags,
   bootstrapOverride = false
@@ -1280,7 +1280,7 @@ function showNewFeature() {
 
 ```lua
 -- 모든 피처 플래그에 대해 노출 데이터 활성화
-local client = Client.New({
+local client = UnleashClient.New({
   -- 기본 구성...
   impressionDataAll = true
 })
@@ -1324,7 +1324,7 @@ Feature Flags 클라이언트에서 노출 데이터를 활성화하고 사용�
 ### 1. 클라이언트 초기화 시 설정
 
 ```lua
-local client = Client.New({
+local client = UnleashClient.New({
   url = "https://unleash.example.com/api",
   clientKey = "your-client-key",
   appName = "your-game-name",
@@ -1540,7 +1540,7 @@ client:On(FeatureFlags.Events.IMPRESSION, function(event)
 
 ```lua
 -- 클라이언트 설정
-local client = Client.New({
+local client = UnleashClient.New({
   -- 기본 구성...
   impressionDataAll = false  -- 기본적으로 비활성화
 })
