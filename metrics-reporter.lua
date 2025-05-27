@@ -1,11 +1,11 @@
 -- TODO backoff 처리
 
-local Json = require("framework.3rdparty.unleash.dkjson")
-local Util = require("framework.3rdparty.unleash.util")
-local Logging = require("framework.3rdparty.unleash.logging")
-local ErrorTypes = require("framework.3rdparty.unleash.error-types")
-local ErrorHelper = require("framework.3rdparty.unleash.error-helper")
-local Validation = require("framework.3rdparty.unleash.validation")
+local Json = require("framework.3rdparty.togglet.dkjson")
+local Util = require("framework.3rdparty.togglet.util")
+local Logging = require("framework.3rdparty.togglet.logging")
+local ErrorTypes = require("framework.3rdparty.togglet.error-types")
+local ErrorHelper = require("framework.3rdparty.togglet.error-helper")
+local Validation = require("framework.3rdparty.togglet.validation")
 
 local MetricsReporter = {}
 MetricsReporter.__index = MetricsReporter
@@ -118,9 +118,9 @@ function MetricsReporter:getHeaders()
     ["Content-Type"] = "application/json",
     ["Cache"] = "no-cache",
     [self.headerName] = self.clientKey,
-    ["unleash-appname"] = self.appName,
-    ["unleash-connection-id"] = self.connectionId,
-    ["unleash-sdk"] = self.sdkName,
+    ["togglet-appname"] = self.appName,
+    ["togglet-connection-id"] = self.connectionId,
+    ["togglet-sdk"] = self.sdkName,
   }
 
   -- TODO customHeadersFunction
@@ -250,7 +250,7 @@ function MetricsReporter:getPayload()
   return {
     bucket = bucket,
     appName = self.appName,
-    instanceId = "lua-proxy-client",
+    instanceId = "lua-proxy-client", -- CHECKME 이게 맞는걸까?
   }
 end
 

@@ -1,4 +1,4 @@
-local ErrorTypes = require("framework.3rdparty.unleash.error-types")
+local ErrorTypes = require("framework.3rdparty.togglet.error-types")
 
 local PREFIX = "__listener__"
 local PREFIX_LENGTH = #PREFIX

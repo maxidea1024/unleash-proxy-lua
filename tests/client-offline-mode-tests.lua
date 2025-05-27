@@ -1,6 +1,6 @@
-local UnleashConfigBuilder = require("framework.3rdparty.unleash.unleash-config-builder")
-local UnleashClient = require("framework.3rdparty.unleash.unleash-client")
-local Util = require("framework.3rdparty.unleash.util")
+local ToggletConfigBuilder = require("framework.3rdparty.togglet.togglet-config-builder")
+local ToggletClient = require("framework.3rdparty.togglet.togglet-client")
+local Util = require("framework.3rdparty.togglet.util")
 
 -- Test helper functions
 local function assertNotNil(value, message)
@@ -186,23 +186,23 @@ local tests = {}
 
 -- Test client creation in offline mode
 function tests.testClientCreationOffline()
-  print("Running test: UnleashClient creation in offline mode")
+  print("Running test: ToggletClient creation in offline mode")
 
-  local config = UnleashConfigBuilder.New("test-app")
+  local config = ToggletConfigBuilder.New("test-app")
       :Offline(true)
       :Bootstrap(sampleBootstrap)
       :Build()
 
-  local client = UnleashClient.New(config)
-  assertNotNil(client, "UnleashClient should be created")
-  assertTrue(client:IsReady(), "UnleashClient should be ready immediately in offline mode")
+  local client = ToggletClient.New(config)
+  assertNotNil(client, "ToggletClient should be created")
+  assertTrue(client:IsReady(), "ToggletClient should be ready immediately in offline mode")
 end
 
 -- Test feature flag evaluation in offline mode
 function tests.testFeatureFlagEvaluation()
   print("Running test: Feature flag evaluation in offline mode")
 
-  local client = UnleashClient.New(UnleashConfigBuilder.New("test-app")
+  local client = ToggletClient.New(ToggletConfigBuilder.New("test-app")
     :Offline(true)
     :Bootstrap(sampleBootstrap)
     :Build())
@@ -224,7 +224,7 @@ end
 function tests.testVariantRetrieval()
   print("Running test: Variant retrieval in offline mode")
 
-  local client = UnleashClient.New(UnleashConfigBuilder.New("test-app")
+  local client = ToggletClient.New(ToggletConfigBuilder.New("test-app")
     :Offline(true)
     :Bootstrap(sampleBootstrap)
     :Build())
@@ -279,7 +279,7 @@ end
 function tests.testVariantDefaultValues()
   print("Running test: Variant default values in offline mode")
 
-  local client = UnleashClient.New(UnleashConfigBuilder.New("test-app")
+  local client = ToggletClient.New(ToggletConfigBuilder.New("test-app")
     :Offline(true)
     :Bootstrap(sampleBootstrap)
     :Build())
@@ -318,7 +318,7 @@ function tests.testContextInOfflineMode()
     }
   }
 
-  local client = UnleashClient.New(UnleashConfigBuilder.New("test-app")
+  local client = ToggletClient.New(ToggletConfigBuilder.New("test-app")
     :Offline(true)
     :Bootstrap(sampleBootstrap)
     :Context(initialContext)
@@ -348,7 +348,7 @@ function tests.testImpressionEventsOffline()
   local mockEventEmitter = createMockEventEmitter()
 
   -- Create a client with impression data enabled
-  local client = UnleashClient.New(UnleashConfigBuilder.New("test-app")
+  local client = ToggletClient.New(ToggletConfigBuilder.New("test-app")
     :Offline(true)
     :Bootstrap(sampleBootstrap)
     :ImpressionDataAll(true)
@@ -389,7 +389,7 @@ end
 function tests.testWatchToggleOffline()
   print("Running test: Watch toggle in offline mode")
 
-  local client = UnleashClient.New(UnleashConfigBuilder.New("test-app")
+  local client = ToggletClient.New(ToggletConfigBuilder.New("test-app")
     :Offline(true)
     :Bootstrap(sampleBootstrap)
     :Build())
@@ -432,7 +432,7 @@ function tests.testBootstrapOverrideOffline()
   print("Running test: Bootstrap override in offline mode")
 
   -- Create a client with bootstrap override enabled
-  local client = UnleashClient.New(UnleashConfigBuilder.New("test-app")
+  local client = ToggletClient.New(ToggletConfigBuilder.New("test-app")
     :Offline(true)
     :Bootstrap(sampleBootstrap)
     :BootstrapOverride(true)
@@ -454,7 +454,7 @@ function tests.testBootstrapOverrideOffline()
     }
   }
 
-  local client2 = UnleashClient.New(UnleashConfigBuilder.New("test-app")
+  local client2 = ToggletClient.New(ToggletConfigBuilder.New("test-app")
     :Offline(true)
     :Bootstrap(differentBootstrap)
     :BootstrapOverride(true)
@@ -469,7 +469,7 @@ end
 function tests.testSyncTogglesOffline()
   print("Running test: Sync toggles in offline mode")
 
-  local client = UnleashClient.New(UnleashConfigBuilder.New("test-app")
+  local client = ToggletClient.New(ToggletConfigBuilder.New("test-app")
     :Offline(true)
     :Bootstrap(sampleBootstrap)
     :Build())
@@ -487,12 +487,12 @@ end
 function tests.testEmptyBootstrapOffline()
   print("Running test: Empty bootstrap in offline mode")
 
-  local client = UnleashClient.New(UnleashConfigBuilder.New("test-app")
+  local client = ToggletClient.New(ToggletConfigBuilder.New("test-app")
     :Offline(true)
     :Bootstrap({}) -- Empty bootstrap
     :Build())
 
-  assertTrue(client:IsReady(), "UnleashClient should be ready with empty bootstrap")
+  assertTrue(client:IsReady(), "ToggletClient should be ready with empty bootstrap")
   assertFalse(client:IsEnabled("any-feature"), "No features should be enabled with empty bootstrap")
 
   local variant = client:GetVariant("any-feature")
@@ -532,7 +532,7 @@ function tests.testComplexBootstrapOffline()
     }
   }
 
-  local client = UnleashClient.New(UnleashConfigBuilder.New("test-app")
+  local client = ToggletClient.New(ToggletConfigBuilder.New("test-app")
     :Offline(true)
     :Bootstrap(complexBootstrap)
     :Build())
@@ -563,7 +563,7 @@ function tests.testErrorHandlingOffline()
   local invalidBootstrap = "not a table"
 
   assertError("bootstrap must be a table", function()
-    UnleashClient.New(UnleashConfigBuilder.New("test-app")
+    ToggletClient.New(ToggletConfigBuilder.New("test-app")
       :Offline(true)
       :Bootstrap(invalidBootstrap)
       :Build())
@@ -575,7 +575,7 @@ function tests.testErrorHandlingOffline()
   }
 
   assertError("feature must be a table", function()
-    UnleashClient.New(UnleashConfigBuilder.New("test-app")
+    ToggletClient.New(ToggletConfigBuilder.New("test-app")
       :Offline(true)
       :Bootstrap(invalidFeatureBootstrap)
       :Build())
@@ -589,7 +589,7 @@ function tests.testErrorHandlingOffline()
   }
 
   assertError("feature must have a name", function()
-    UnleashClient.New(UnleashConfigBuilder.New("test-app")
+    ToggletClient.New(ToggletConfigBuilder.New("test-app")
       :Offline(true)
       :Bootstrap(missingNameBootstrap)
       :Build())
@@ -600,7 +600,7 @@ end
 function tests.testMultipleClientsOffline()
   print("Running test: Multiple clients in offline mode")
 
-  local client1 = UnleashClient.New(UnleashConfigBuilder.New("app1")
+  local client1 = ToggletClient.New(ToggletConfigBuilder.New("app1")
     :Offline(true)
     :Bootstrap({
       {
@@ -610,7 +610,7 @@ function tests.testMultipleClientsOffline()
     })
     :Build())
 
-  local client2 = UnleashClient.New(UnleashConfigBuilder.New("app2")
+  local client2 = ToggletClient.New(ToggletConfigBuilder.New("app2")
     :Offline(true)
     :Bootstrap({
       {
@@ -632,11 +632,11 @@ function tests.testDelayedBootstrapOffline()
   print("Running test: Delayed bootstrap in offline mode")
 
   -- Create client without bootstrap initially
-  local client = UnleashClient.New(UnleashConfigBuilder.New("test-app")
+  local client = ToggletClient.New(ToggletConfigBuilder.New("test-app")
     :Offline(true)
     :Build())
 
-  assertTrue(client:IsReady(), "UnleashClient should be ready even without bootstrap")
+  assertTrue(client:IsReady(), "ToggletClient should be ready even without bootstrap")
   assertFalse(client:IsEnabled("any-feature"), "No features should be enabled without bootstrap")
 
   -- Set bootstrap data after client creation
@@ -662,7 +662,7 @@ function tests.testCustomLoggerOffline()
     error = function(message) table.insert(logMessages, { level = "error", message = message }) end
   }
 
-  local client = UnleashClient.New(UnleashConfigBuilder.New("test-app")
+  local client = ToggletClient.New(ToggletConfigBuilder.New("test-app")
     :Offline(true)
     :Bootstrap(sampleBootstrap)
     :Logger(customLogger)
@@ -673,7 +673,7 @@ function tests.testCustomLoggerOffline()
   -- Check for client initialization log
   local foundInitLog = false
   for _, log in ipairs(logMessages) do
-    if log.level == "info" and string.match(log.message, "UnleashClient initialized in offline mode") then
+    if log.level == "info" and string.match(log.message, "ToggletClient initialized in offline mode") then
       foundInitLog = true
       break
     end
@@ -693,14 +693,14 @@ function tests.testCustomStorageOffline()
     remove = function(key) storage[key] = nil end
   }
 
-  local client = UnleashClient.New(UnleashConfigBuilder.New("test-app")
+  local client = ToggletClient.New(ToggletConfigBuilder.New("test-app")
     :Offline(true)
     :Bootstrap(sampleBootstrap)
     :Storage(customStorage)
     :Build())
 
   -- In offline mode, storage should still work but not be necessary
-  assertTrue(client:IsReady(), "UnleashClient should be ready with custom storage")
+  assertTrue(client:IsReady(), "ToggletClient should be ready with custom storage")
   assertTrue(client:IsEnabled("string-feature"), "Features should be available with custom storage")
 end
 
@@ -710,7 +710,7 @@ function tests.testCustomEventHandlersOffline()
 
   local events = {}
 
-  local client = UnleashClient.New(UnleashConfigBuilder.New("test-app")
+  local client = ToggletClient.New(ToggletConfigBuilder.New("test-app")
     :Offline(true)
     :Bootstrap(sampleBootstrap)
     :Build())
@@ -753,7 +753,7 @@ function tests.testPerformanceWithLargeBootstrap()
 
   local startTime = os.clock()
 
-  local client = UnleashClient.New(UnleashConfigBuilder.New("test-app")
+  local client = ToggletClient.New(ToggletConfigBuilder.New("test-app")
     :Offline(true)
     :Bootstrap(largeBootstrap)
     :Build())
@@ -806,7 +806,7 @@ function tests.testFeatureDependenciesOffline()
     }
   }
 
-  local client = UnleashClient.New(UnleashConfigBuilder.New("test-app")
+  local client = ToggletClient.New(ToggletConfigBuilder.New("test-app")
     :Offline(true)
     :Bootstrap(dependencyBootstrap)
     :Build())

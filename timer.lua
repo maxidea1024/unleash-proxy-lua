@@ -1,8 +1,8 @@
 local Timer = {}
 Timer.__index = Timer
 
-local ErrorTypes = require("framework.3rdparty.unleash.error-types")
-local Logging = require("framework.3rdparty.unleash.logging")
+local ErrorTypes = require("framework.3rdparty.togglet.error-types")
+local Logging = require("framework.3rdparty.togglet.logging")
 
 function Timer.New(loggerFactory, client)
   if not loggerFactory then error("`loggerFactory` is required") end

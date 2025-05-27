@@ -29,6 +29,30 @@ function Validation.RequireString(value, paramName, functionName, allowEmpty)
   return value
 end
 
+-- Validates that a value is a valid name (string with specific format)
+-- @param value - The value to check
+-- @param paramName - The parameter name for error message
+-- @param functionName - The function name for error context
+function Validation.RequireName(value, paramName, functionName)
+  if type(value) ~= "string" then
+    error(string.format("`%s` must be a string in `%s`, got %s",
+      paramName, functionName, type(value)))
+  end
+
+  if #value == 0 then
+    error(string.format("`%s` cannot be empty in `%s`", paramName, functionName))
+  end
+  
+  -- 이름에 허용되지 않는 특수 문자 체크
+  local invalidChars = value:match("[^%w%.%-%_]")
+  if invalidChars then
+    error(string.format("`%s` contains invalid characters in `%s`. Only alphanumeric characters, dots, hyphens, and underscores are allowed.",
+      paramName, functionName))
+  end
+
+  return value
+end
+
 -- Validates that a value is a table
 -- @param value - The value to check
 -- @param paramName - The parameter name for error message
@@ -179,3 +203,4 @@ function Validation.RequireInstance(value, class, paramName, functionName)
 end
 
 return Validation
+

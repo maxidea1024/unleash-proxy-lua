@@ -1,9 +1,9 @@
-local Json = require("framework.3rdparty.unleash.dkjson")
-local Validation = require("framework.3rdparty.unleash.validation")
-local ErrorTypes = require("framework.3rdparty.unleash.error-types")
+local Json = require("framework.3rdparty.togglet.dkjson")
+local Validation = require("framework.3rdparty.togglet.validation")
+local ErrorTypes = require("framework.3rdparty.togglet.error-types")
 
-local VariantProxy = {}
-VariantProxy.__index = VariantProxy
+local ToggleProxy = {}
+ToggleProxy.__index = ToggleProxy
 
 -- Constants for common default values
 local DEFAULT_VALUES = {
@@ -15,63 +15,63 @@ local DEFAULT_VALUES = {
 
 -- Helper function to handle payload validation
 local function validatePayload(self, expectedType, defaultValue)
-  if not self.rawVariant or not self.rawVariant.payload then
+  if not self.variant or not self.variant.payload then
     -- TODO 로그로 출력하지 말고, detail 결과로 반환하는게 안지저분할듯
     -- self.client.logger:Warn("No valid payload found for feature `%s`", self.featureName)
     return false, defaultValue
   end
 
-  if self.rawVariant.payload.type ~= expectedType then
+  if self.variant.payload.type ~= expectedType then
     -- TODO 로그로 출력하지 말고, detail 결과로 반환하는게 안지저분할듯
     -- self.client.logger:Warn("Expected `%s` payload for feature `%s` but got `%s`",
-    --   expectedType, self.featureName, self.rawVariant.payload.type or "nil")
+    --   expectedType, self.featureName, self.variant.payload.type or "nil")
     return false, defaultValue
   end
 
-  if self.rawVariant.payload.value == nil then
+  if self.variant.payload.value == nil then
     -- TODO 로그로 출력하지 말고, detail 결과로 반환하는게 안지저분할듯
     -- self.client.logger:Warn("Empty %s payload for feature `%s`", expectedType, self.featureName)
     return false, defaultValue
   end
 
-  return true, self.rawVariant.payload.value
+  return true, self.variant.payload.value
 end
 
-function VariantProxy.New(client, featureName, rawVariant)
-  Validation.RequireValue(client, "client", "VariantProxy.New")
-  Validation.RequireString(featureName, "featureName", "VariantProxy.New")
-  Validation.RequireTable(rawVariant, "rawVariant", "VariantProxy.New")
+function ToggleProxy.New(client, featureName, variant)
+  Validation.RequireValue(client, "client", "ToggleProxy.New")
+  Validation.RequireName(featureName, "featureName", "ToggleProxy.New")
+  Validation.RequireTable(variant, "variant", "ToggleProxy.New")
 
-  local self = setmetatable({}, VariantProxy)
+  local self = setmetatable({}, ToggleProxy)
   self.client = client
   self.featureName = featureName
-  self.rawVariant = rawVariant
+  self.variant = variant
   return self
 end
 
-function VariantProxy:FeatureName()
+function ToggleProxy:FeatureName()
   return self.featureName
 end
 
-function VariantProxy:VariantName(defaultVariantName)
-  return self.rawVariant.name or defaultVariantName or "disabled"
+function ToggleProxy:VariantName(defaultVariantName)
+  return self.variant.name or defaultVariantName or "disabled"
 end
 
-function VariantProxy:RawVariant()
-  return self.rawVariant
+function ToggleProxy:RawVariant()
+  return self.variant
 end
 
-function VariantProxy:IsEnabled()
-  return self.rawVariant.feature_enabled or DEFAULT_VALUES.BOOLEAN
+function ToggleProxy:IsEnabled()
+  return self.variant.feature_enabled or DEFAULT_VALUES.BOOLEAN
 end
 
-function VariantProxy:BoolVariation(defaultValue)
+function ToggleProxy:BoolVariation(defaultValue)
   Validation.RequireBoolean(defaultValue, "defaultValue", "BoolVariation")
 
-  return self.rawVariant.feature_enabled or defaultValue
+  return self.variant.feature_enabled or defaultValue
 end
 
-function VariantProxy:NumberVariation(defaultValue)
+function ToggleProxy:NumberVariation(defaultValue)
   Validation.RequireNumber(defaultValue, "defaultValue", "NumberVariation")
 
   local isPayloadValid, payloadValue = validatePayload(self, "number", defaultValue)
@@ -88,28 +88,28 @@ function VariantProxy:NumberVariation(defaultValue)
   else
     -- TODO 로그로 출력하지 말고, detail 결과로 반환하는게 안지저분할듯
 
-    self.client.logger:Warn("Failed to convert value to number for feature `%s`: %s",
-      self.featureName, tostring(payloadValue))
+    -- self.client.logger:Warn("Failed to convert value to number for feature `%s`: %s",
+    --   self.featureName, tostring(payloadValue))
 
-    self.client:emitError(
-      ErrorTypes.CONVERSION_ERROR,
-      "Failed to convert value to number",
-      "VariantProxy:NumberVariation",
-      nil, -- use default log level
-      {
-        featureName = self.featureName,
-        payload = payloadValue,
-        expectedType = "number",
-        prevention = "Ensure payload values are valid numbers or can be converted to numbers.",
-        solution = "Check the feature flag configuration and make sure number values are properly formatted."
-      }
-    )
+    -- self.client:emitError(
+    --   ErrorTypes.CONVERSION_ERROR,
+    --   "Failed to convert value to number",
+    --   "ToggleProxy:NumberVariation",
+    --   nil, -- use default log level
+    --   {
+    --     featureName = self.featureName,
+    --     payload = payloadValue,
+    --     expectedType = "number",
+    --     prevention = "Ensure payload values are valid numbers or can be converted to numbers.",
+    --     solution = "Check the feature flag configuration and make sure number values are properly formatted."
+    --   }
+    -- )
 
     return defaultValue
   end
 end
 
-function VariantProxy:StringVariation(defaultValue)
+function ToggleProxy:StringVariation(defaultValue)
   Validation.RequireString(defaultValue, "defaultValue", "StringVariation", true) -- allow empty
 
   local isPayloadValid, payloadValue = validatePayload(self, "string", defaultValue)
@@ -125,7 +125,7 @@ function VariantProxy:StringVariation(defaultValue)
   end
 end
 
-function VariantProxy:JsonVariation(defaultValue)
+function ToggleProxy:JsonVariation(defaultValue)
   Validation.RequireTable(defaultValue, "defaultValue", "JsonVariation")
 
   local isPayloadValid, payloadValue = validatePayload(self, "json", defaultValue)
@@ -140,21 +140,21 @@ function VariantProxy:JsonVariation(defaultValue)
   if not success or not result then
     -- TODO 로그로 출력하지 말고, detail 결과로 반환하는게 안지저분할듯
 
-    self.client.logger:Warn("Failed to decode JSON for feature `%s`: %s", self.featureName, tostring(result))
+    -- self.client.logger:Warn("Failed to decode JSON for feature `%s`: %s", self.featureName, tostring(result))
 
-    self.client:emitError(
-      ErrorTypes.JSON_ERROR,
-      "Failed to decode JSON payload",
-      "VariantProxy:JsonVariation",
-      nil, -- use default log level
-      {
-        featureName = self.featureName,
-        payload = payloadValue,
-        errorMessage = tostring(result),
-        prevention = "Ensure JSON payloads are valid and properly formatted.",
-        solution = "Check the feature flag configuration and validate the JSON syntax."
-      }
-    )
+    -- self.client:emitError(
+    --   ErrorTypes.JSON_ERROR,
+    --   "Failed to decode JSON payload",
+    --   "ToggleProxy:JsonVariation",
+    --   nil, -- use default log level
+    --   {
+    --     featureName = self.featureName,
+    --     payload = payloadValue,
+    --     errorMessage = tostring(result),
+    --     prevention = "Ensure JSON payloads are valid and properly formatted.",
+    --     solution = "Check the feature flag configuration and validate the JSON syntax."
+    --   }
+    -- )
 
     return defaultValue
   end
@@ -163,12 +163,12 @@ function VariantProxy:JsonVariation(defaultValue)
 end
 
 -- TODO 이름이 모호해서 일단은 기능을 막아둠.
--- function VariantProxy:Variation(defaultValue)
---   if not self.rawVariant or not self.rawVariant.payload then
+-- function ToggleProxy:Variation(defaultValue)
+--   if not self.variant or not self.variant.payload then
 --     return defaultValue
 --   end
 
---   local payloadType = self.rawVariant.payload.type
+--   local payloadType = self.variant.payload.type
 
 --   if payloadType == "boolean" then
 --     if type(defaultValue) ~= "boolean" then
@@ -205,7 +205,7 @@ end
 --     self.client:emitError(
 --       ErrorTypes.INVALID_PAYLOAD_TYPE,
 --       "Unknown payload type",
---       "VariantProxy:GetVariation",
+--       "ToggleProxy:GetVariation",
 --       nil,
 --       {
 --         featureName = self.featureName,
@@ -219,32 +219,32 @@ end
 --   end
 -- end
 
-function VariantProxy:GetPayloadType()
-  return self.rawVariant.payload and self.rawVariant.payload.type or "<none>"
+function ToggleProxy:GetPayloadType()
+  return self.variant.payload and self.variant.payload.type or "<none>"
 end
 
 -- Cache for variant proxies to avoid creating new objects for the same feature/variant
-VariantProxy.Cache = setmetatable({}, { __mode = "v" })
+ToggleProxy.Cache = setmetatable({}, { __mode = "v" })
 
 -- Factory method that uses caching
-function VariantProxy.GetOrCreate(client, featureName, rawVariant)
-  local cacheKey = featureName .. ":" .. (rawVariant and rawVariant.name or "default")
-  local cached = VariantProxy.Cache[cacheKey]
+function ToggleProxy.GetOrCreate(client, featureName, variant)
+  local cacheKey = featureName .. ":" .. (variant and variant.name or "default")
+  local cached = ToggleProxy.Cache[cacheKey]
 
   if cached then
-    local isSameReference = cached.rawVariant == rawVariant
+    local isSameReference = cached.variant == variant
     local isSameContent = false
 
-    if not isSameReference and rawVariant then
+    if not isSameReference and variant then
       isSameContent =
-          cached.rawVariant and
-          cached.rawVariant.name == rawVariant.name and
-          cached.rawVariant.feature_enabled == rawVariant.feature_enabled and
+          cached.variant and
+          cached.variant.name == variant.name and
+          cached.variant.feature_enabled == variant.feature_enabled and
           (
-            (not cached.rawVariant.payload and not rawVariant.payload) or
-            (cached.rawVariant.payload and rawVariant.payload and
-              cached.rawVariant.payload.type == rawVariant.payload.type and
-              cached.rawVariant.payload.value == rawVariant.payload.value)
+            (not cached.variant.payload and not variant.payload) or
+            (cached.variant.payload and variant.payload and
+              cached.variant.payload.type == variant.payload.type and
+              cached.variant.payload.value == variant.payload.value)
           )
     end
 
@@ -253,9 +253,9 @@ function VariantProxy.GetOrCreate(client, featureName, rawVariant)
     end
   end
 
-  local proxy = VariantProxy.New(client, featureName, rawVariant)
-  VariantProxy.Cache[cacheKey] = proxy
+  local proxy = ToggleProxy.New(client, featureName, variant)
+  ToggleProxy.Cache[cacheKey] = proxy
   return proxy
 end
 
-return VariantProxy
+return ToggleProxy

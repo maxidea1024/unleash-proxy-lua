@@ -1,5 +1,6 @@
-local Json = require("framework.3rdparty.unleash.dkjson")
-local Util = require("framework.3rdparty.unleash.util")
+local Json = require("framework.3rdparty.togglet.dkjson")
+local Util = require("framework.3rdparty.togglet.util")
+local Promise = require("framework.3rdparty.togglet.promise")
 
 local FileStorageProvider = {}
 FileStorageProvider.__index = FileStorageProvider
@@ -14,22 +15,22 @@ function FileStorageProvider.New(backupPath, prefix, loggerFactory)
   return self
 end
 
-function FileStorageProvider:Store(key, data, callback)
-  callback = callback or function(err) end
+function FileStorageProvider:Store(key, data)
+  local promise = Promise.New()
 
   local filename = self:getStorageFilename(key)
   local success, jsonData = pcall(Json.encode, data)
   if not success or type(jsonData) ~= "string" then
-    self.logger:error("Failed to encode JSON: " .. tostring(jsonData))
-    callback(jsonData)
-    return
+    -- self.logger:Error("Failed to encode JSON: " .. tostring(jsonData))
+    promise:Reject(jsonData)
+    return promise
   end
 
   local file, err = io.open(filename, "w")
   if not file then
-    self.logger:Error("Failed to open file for writing: " .. tostring(err))
-    callback(err)
-    return
+    -- self.logger:Error("Failed to open file for writing: " .. tostring(err))
+    promise:Reject(err)
+    return promise
   end
 
   local ok, writeErr = pcall(function()
@@ -37,25 +38,28 @@ function FileStorageProvider:Store(key, data, callback)
     file:close()
   end)
   if not ok then
-    self.logger:Error("Failed to write to file: " .. tostring(writeErr))
-    callback(writeErr)
-    return
+    -- self.logger:Error("Failed to write to file: " .. tostring(writeErr))
+    promise:Reject(writeErr)
+    return promise
   end
 
-  callback(nil)
+  promise:Resolve()
+  return promise
 end
 
-function FileStorageProvider:Load(key, callback)
+function FileStorageProvider:Load(key)
+  local promise = Promise.New()
+
   local filename = self:getStorageFilename(key)
   local file, err = io.open(filename, "r")
   if not file then
     if err and err:match("No such file") then
-      callback(nil, nil) -- No data found
+      promise:Resolve(nil) -- No data found
     else
-      self.logger:Error("Failed to open file for reading: " .. tostring(err))
-      callback(nil, err)
+      -- self.logger:Error("Failed to open file for reading: " .. tostring(err))
+      promise:Reject(err)
     end
-    return
+    return promise
   end
 
   local ok, rawData = pcall(function()
@@ -64,87 +68,25 @@ function FileStorageProvider:Load(key, callback)
     return data
   end)
   if not ok then
-    self.logger:Error("Failed to read file: " .. tostring(rawData))
-    callback(nil, rawData)
-    return
+    -- self.logger:Error("Failed to read file: " .. tostring(rawData))
+    promise:Reject(rawData)
+    return promise
   end
 
   if not rawData or rawData == "" then
-    callback(nil, nil) -- No data found
-    return
+    promise:Resolve(nil) -- No data found
+    return promise
   end
 
   local success, data = pcall(Json.decode, rawData)
   if not success then
-    self.logger:Error("Failed to decode JSON: " .. tostring(data))
-    callback(nil, data)
-    return
+    -- self.logger:Error("Failed to decode JSON: " .. tostring(data))
+    promise:Reject(data)
+    return promise
   end
 
-  callback(data, nil)
-end
-
-function FileStorageProvider:StoreSync(key, data)
-  local filename = self:getStorageFilename(key)
-  local success, jsonData = pcall(Json.encode, data)
-  if not success or type(jsonData) ~= "string" then
-    self.logger:Error("Failed to encode JSON: " .. tostring(jsonData))
-    return false, jsonData
-  end
-
-  local file, err = io.open(filename, "w")
-  if not file then
-    self.logger:Error("Failed to open file for writing: " .. tostring(err))
-    return false, err
-  end
-
-  local ok, writeErr = pcall(function()
-    file:write(jsonData)
-    file:close()
-  end)
-  if not ok then
-    self.logger:Error("Failed to write to file: " .. tostring(writeErr))
-    return false, writeErr
-  end
-
-  return true, nil
-end
-
-function FileStorageProvider:LoadSync(key)
-  local filename = self:getStorageFilename(key)
-  local file, err = io.open(filename, "r")
-  if not file then
-    if err and err:match("No such file") then
-      return nil, nil -- No data found
-    else
-      self.logger:Error("Failed to open file for reading: " .. tostring(err))
-      return nil, err
-    end
-
-    return nil, nil
-  end
-
-  local ok, rawData = pcall(function()
-    local data = file:read("*all")
-    file:close()
-    return data
-  end)
-  if not ok then
-    self.logger:Error("Failed to read file: " .. tostring(rawData))
-    return nil, rawData
-  end
-
-  if not rawData or rawData == "" then
-    return nil, nil -- No data found
-  end
-
-  local success, data = pcall(Json.decode, rawData)
-  if not success then
-    self.logger:Error("Failed to decode JSON: " .. tostring(data))
-    return nil, data
-  end
-
-  return data, nil
+  promise:Resolve(data)
+  return promise
 end
 
 function FileStorageProvider:getStorageFilename(key)
