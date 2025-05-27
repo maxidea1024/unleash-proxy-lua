@@ -161,7 +161,7 @@ end)
 #### 메서드
 - `Start()` - 클라이언트 시작 및 초기화
 - `IsEnabled(featureName, forceSelectRealtimeToggle?)` - 피처 플래그 활성화 상태 확인
-- `GetVariant(featureName, forceSelectRealtimeToggle?)` - 원시 변형 데이터 반환 (내부용)
+- `GetVariant(featureName, forceSelectRealtimeToggle?)` - 원시 변형 데이터 반환
 - `GetToggle(featureName, forceSelectRealtimeToggle?)` - 피처 토글 프록시 가져오기 (ToggleProxy 반환, 권장)
 - `SetContextFields(fields)` - 사용자 컨텍스트 필드들 설정
 - `SetContextField(field, value)` - 단일 컨텍스트 필드 설정
@@ -177,6 +177,7 @@ end)
 - `StringVariation(featureName, defaultValue, forceSelectRealtimeToggle?)` - 문자열 값 직접 가져오기
 - `JsonVariation(featureName, defaultValue, forceSelectRealtimeToggle?)` - JSON 값 직접 가져오기
 - `Variation(featureName, defaultVariantName, forceSelectRealtimeToggle?)` - 변형 이름 직접 가져오기
+**주의**: 명확한 사용을 위해서 `defaultValue`, `defaultVariantName` 인자는 생략할수 없습니다.
 
 #### 이벤트
 - `Events.READY` - 클라이언트 준비 완료
@@ -425,19 +426,19 @@ local webClient = ToggletConfigBuilder.New("web-app")
 
 -- 사용자별 기능 제공
 function renderUserDashboard(userId)
-  webClient:SetContextFields({ userId = userId })
+  webClient:SetContextFields({ userId = userId }):Next(function()
+    -- 새로운 대시보드 UI
+    if webClient:IsEnabled("new-dashboard-ui") then
+      renderNewDashboard()
+    else
+      renderClassicDashboard()
+    end
 
-  -- 새로운 대시보드 UI
-  if webClient:IsEnabled("new-dashboard-ui") then
-    renderNewDashboard()
-  else
-    renderClassicDashboard()
-  end
-
-  -- 프리미엄 기능
-  if webClient:IsEnabled("premium-features") then
-    showPremiumFeatures()
-  end
+    -- 프리미엄 기능
+    if webClient:IsEnabled("premium-features") then
+      showPremiumFeatures()
+    end
+  end)
 end
 ```
 
