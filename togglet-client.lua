@@ -485,7 +485,6 @@ function ToggletClient:SyncToggles(fetchNow)
     return self:UpdateToggles(true) -- skip calculate context hash
         :Next(function()
           self:conditionalSyncToggleMap()
-          -- return Promise.Completed()
         end)
   else
     self:conditionalSyncToggleMap()
@@ -551,8 +550,6 @@ function ToggletClient:UpdateToggles(skipCalculateContextHash)
   end
 
   if self.fetching then
-    -- FIXME 강제로 스케줄링된 타이머를 취소하고 바로 요청하는 형태의 옵션이 필요하다.
-
     local promise = Promise.New()
     if skipCalculateContextHash or self.fetchingContextHash ~= Util.CalculateHash(self.context) then
       self:Once(Events.FETCH_COMPLETED, function()
@@ -562,6 +559,7 @@ function ToggletClient:UpdateToggles(skipCalculateContextHash)
       end)
     else
       self:Once(Events.FETCH_COMPLETED, function()
+        -- refetch를 해줘야할까?
         promise:Resolve()
       end)
     end
@@ -569,6 +567,8 @@ function ToggletClient:UpdateToggles(skipCalculateContextHash)
   end
 
   if self.started then
+    self.logger:Debug("Force refetch now...")
+
     self:cancelFetchTimer()
     return self:fetchToggles()
   else
@@ -791,6 +791,7 @@ function ToggletClient:countSuccess()
   return self:getNextFetchDelay()
 end
 
+-- FIXME retry 상황일때 처리만 신경써주면 문제없을듯 하다!!
 function ToggletClient:scheduleNextFetch(interval, retry)
   if interval > 0 then
     if retry == true then

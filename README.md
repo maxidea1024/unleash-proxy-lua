@@ -47,7 +47,7 @@ end)
 
 ### Step 3: Let the client synchronize
 
-You should wait for the client's `ready` or `initialized` events before you start working with it. Before it's ready, the client might not report the correct state for your features.
+You should wait for the client's `ready` or `init` events before you start working with it. Before it's ready, the client might not report the correct state for your features.
 
 ```lua
 client:On(Togglet.Events.READY, function()
@@ -166,7 +166,7 @@ The Togglet SDK takes the following options:
 | `customHeaders` | no | `{}` | Additional headers to use when making HTTP requests |
 | `experimental` | no | `{}` | Experimental features configuration |
 
-## Listen for updates via the EventEmitter
+## Listen for updates
 
 The client is also an event emitter. This means that your code can subscribe to updates from the client. This is a neat way to update your app when toggle state updates.
 
@@ -180,7 +180,7 @@ end)
 ### Available events:
 
 - **error** - emitted when an error occurs on init, or when fetch function fails, or when fetch receives a non-ok response object. The error object is sent as payload.
-- **initialized** - emitted after the SDK has read local cached data in the storageProvider.
+- **init** - emitted after the SDK has read local cached data in the storageProvider.
 - **ready** - emitted after the SDK has successfully started and performed the initial fetch towards the Togglet server.
 - **update** - emitted every time the Togglet server returns a new feature toggle configuration. The SDK will emit this event as part of the initial fetch from the SDK.
 
