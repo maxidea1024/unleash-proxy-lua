@@ -612,7 +612,7 @@ function ToggletClient:updateContextField(field, value)
     end
   end
 
-  -- self.logger:Debug("updateContextField: field=`%s`, value=`%s`", field, value)
+  self.logger:Debug("updateContextField: field=`%s`, value=`%s`", field, value)
 
   if field == "userId" then
     if value == self.context.userId then return false end
@@ -919,7 +919,7 @@ function ToggletClient:storeToggles(toggleArray)
     local newToggle = newToggleMap[oldToggle.name]
     local toggleIsDisabled = newToggle == nil
     if toggleIsDisabled then
-      self.logger:Info("Feature flag `%s` is disabled.", oldToggle.name)
+      self.logger:Debug("Feature flag `%s` is disabled.", oldToggle.name)
       local eventName = "update:" .. oldToggle.name
       if self.eventEmitter:HasListeners(eventName) then
         self.eventEmitter:Emit(eventName, self:GetToggle(oldToggle.name, true)) -- skip calculate context hash select realtime toggle
@@ -933,10 +933,10 @@ function ToggletClient:storeToggles(toggleArray)
 
     local oldToggle = oldToggleMap[newToggle.name]
     if not oldToggle then
-      self.logger:Info("Feature flag `%s` is enabled.", newToggle.name)
+      self.logger:Debug("Feature flag `%s` is enabled.", newToggle.name)
       emitEvent = true
     elseif Util.CalculateHash(oldToggle) ~= Util.CalculateHash(newToggle) then
-      self.logger:Info("Feature flag `%s` is enabled and variants changed.", newToggle.name)
+      self.logger:Debug("Feature flag `%s` is enabled and variants changed.", newToggle.name)
       emitEvent = true
     end
 
@@ -1082,16 +1082,16 @@ function ToggletClient:fetchToggles()
     headers["Content-Length"] = tostring(body and #body or 0)
   end
 
-  -- if self.logger:IsEnabled(Logging.LogLevel.Debug) then
-  --   local success, jsonUrl = pcall(Json.encode, Util.UrlDecode(url))
-  --   if success then
-  --     self.logger:Debug("Fetching feature flags: %s", jsonUrl)
-  --   else
-  --     self.logger:Debug("Fetching feature flags: %s [JSON encoding failed]", tostring(url))
-  --   end
-  -- end
+  if self.logger:IsEnabled(Logging.LogLevel.Debug) then
+    local success, jsonUrl = pcall(Json.encode, Util.UrlDecode(url))
+    if success then
+      self.logger:Debug("Fetching feature flags: %s", jsonUrl)
+    else
+      self.logger:Debug("Fetching feature flags: %s [JSON encoding failed]", tostring(url))
+    end
+  end
 
-  self.logger:Debug("Fetching feature flags...")
+  -- self.logger:Debug("Fetching feature flags...")
 
   self.fetching = true
   self.fetchingContextHash = Util.CalculateHash(self.context)
@@ -1129,7 +1129,7 @@ function ToggletClient:handleFetchResponse(url, method, headers, body, response,
 
     self:processSuccessfulResponse(data, promise)
   elseif response.status == 304 then
-    self.logger:Debug("No changes in feature flags (304), using cached data")
+    self.logger:Debug("No changes in feature flags, using cached data")
 
     if not self.fetchedFromServer then
       self.fetchedFromServer = true
