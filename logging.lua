@@ -24,7 +24,7 @@ end
 
 local function defaultFormatter(time, level, category, message)
   -- return string.format("[%s] [%s] [%s] %s", time, getLevelName(level), category, message)
-  return string.format("[%s] [%s] %s", getLevelName(level), category, message)
+  return string.format("[%s] [%s] %s", getLevelName(level):sub(1, 1), category, message)
   -- return string.format("[%s] %s", category, message)
 end
 

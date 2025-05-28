@@ -120,7 +120,7 @@ function ToggleProxy:StringVariation(defaultValue)
   if payloadValue ~= nil then
     return tostring(payloadValue)
   else
-    self.client.logger:Warn("nil value for feature `%s`", self.featureName)
+    -- self.client.logger:Warn("nil value for feature `%s`", self.featureName)
     return defaultValue
   end
 end
@@ -224,12 +224,12 @@ function ToggleProxy:GetPayloadType()
 end
 
 -- Cache for variant proxies to avoid creating new objects for the same feature/variant
-ToggleProxy.Cache = setmetatable({}, { __mode = "v" })
+ToggleProxy.cache = setmetatable({}, { __mode = "v" })
 
 -- Factory method that uses caching
 function ToggleProxy.GetOrCreate(client, featureName, variant)
   local cacheKey = featureName .. ":" .. (variant and variant.name or "default")
-  local cached = ToggleProxy.Cache[cacheKey]
+  local cached = ToggleProxy.cache[cacheKey]
 
   if cached then
     local isSameReference = cached.variant == variant
@@ -254,7 +254,7 @@ function ToggleProxy.GetOrCreate(client, featureName, variant)
   end
 
   local proxy = ToggleProxy.New(client, featureName, variant)
-  ToggleProxy.Cache[cacheKey] = proxy
+  ToggleProxy.cache[cacheKey] = proxy
   return proxy
 end
 
