@@ -1,5 +1,5 @@
 local ToggletClient = require("framework.3rdparty.togglet.togglet-client")
-local ToggletConfigBuilder = require("framework.3rdparty.togglet.togglet-config-builder")
+local ToggletClientBuilder = require("framework.3rdparty.togglet.togglet-client-builder")
 local InMemoryStorageProvider = require("framework.3rdparty.togglet.storage-provider-inmemory")
 local FileStorageProvider = require("framework.3rdparty.togglet.storage-provider-file")
 local Events = require("framework.3rdparty.togglet.events")
@@ -8,7 +8,7 @@ local Util = require("framework.3rdparty.togglet.util")
 
 return {
   ToggletClient = ToggletClient,
-  ToggletConfigBuilder = ToggletConfigBuilder,
+  ToggletClientBuilder = ToggletClientBuilder,
   InMemoryStorageProvider = InMemoryStorageProvider,
   FileStorageProvider = FileStorageProvider,
   Events = Events,

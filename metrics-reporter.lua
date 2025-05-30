@@ -78,18 +78,18 @@ function MetricsReporter:Start()
 
     -- TODO timeout으로 변경하자.
 
-    -- self.timer:Async(function()
-    --   -- Initial delay before starting the metrics collection
-    --   if self.metricsIntervalInitial > 0 then
-    --     self.timer:Sleep(self.metricsIntervalInitial)
-    --   end
+    self.timer:Async(function()
+      -- Initial delay before starting the metrics collection
+      if self.metricsIntervalInitial > 0 then
+        self.timer:Sleep(self.metricsIntervalInitial)
+      end
 
-    --   -- Start the metrics collection loop
-    --   while self.timerRunning do
-    --     self:SendMetrics()
-    --     self.timer:Sleep(self.metricsInterval)
-    --   end
-    -- end)
+      -- Start the metrics collection loop
+      while self.timerRunning do
+        self:SendMetrics()
+        self.timer:Sleep(self.metricsInterval)
+      end
+    end)
 
     return true
   end
@@ -118,9 +118,9 @@ function MetricsReporter:getHeaders()
     ["Content-Type"] = "application/json",
     ["Cache"] = "no-cache",
     [self.headerName] = self.clientKey,
-    ["togglet-appname"] = self.appName,
-    ["togglet-connection-id"] = self.connectionId,
-    ["togglet-sdk"] = self.sdkName,
+    ["unleash-appname"] = self.appName,
+    ["unleash-connection-id"] = self.connectionId,
+    ["unleash-sdk"] = self.sdkName,
   }
 
   -- TODO customHeadersFunction

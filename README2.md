@@ -11,8 +11,6 @@ Lua 애플리케이션을 위한 피처 플래그 클라이언트로, Togglet �
 - **카나리 배포**: 새 기능을 소수의 사용자에게 먼저 출시하여 문제 조기 발견
 - **피쳐 플래그**: 문제 발생 시 코드 롤백 없이 즉시 기능 비활성화 가능
 - **조건부 기능**: 특정 사용자, 지역, 디바이스 등에 따라 다른 기능 제공
-- **구독 기반 기능**: 프리미엄 사용자에게만 특정 기능 제공
-- **계절 이벤트**: 특정 기간에만 활성화되는 기능 관리
 
 ## 설치
 
@@ -46,14 +44,16 @@ local client = ToggletClient.New({
 ```lua
 local client = ToggletClient.New({
   -- 필수 매개변수
+  appName = "your-app-name",
+
+  -- 온라인 모드(offline=true)에서 필요한 매개변수
   url = "https://togglet.example.com/api",
   clientKey = "your-client-key",
-  appName = "your-app-name",
   request = yourHttpRequestFunction,
   
   -- 선택적 매개변수
   environment = "production",               -- 환경 이름 (기본값: "default")
-  refreshInterval = 30,                     -- 폴링 간격(초) (기본값: 30)
+  refreshInterval = 15,                     -- 폴링 간격(초) (기본값: 15)
   disableAutoStart = false,                 -- true로 설정하여 수동으로 시작
   offline = false,                          -- 오프라인 모드 활성화
   bootstrap = initialFeatureFlags,          -- 초기 피처 플래그
@@ -83,10 +83,10 @@ else
   -- 기능 A가 비활성화된 경우 실행할 코드
 end
 
--- 변형(variant) 가져오기
-local variant = client:GetVariant("feature-b")
-if variant:IsEnabled() then
-  local payload = variant:JsonVariation({}) -- 기본값은 빈 객체
+-- 토글 및 Variant 가져오기
+local toggle = client:GetToggle("feature-b")
+if toggle:IsEnabled() then
+  local payload = toggle:JsonVariation({}) -- 기본값은 빈 객체
   -- payload를 사용하는 코드
 end
 
@@ -96,8 +96,8 @@ client:On(Togglet.Events.UPDATE, function()
 end)
 
 -- 특정 토글 변경 이벤트 구독
-client:WatchToggle("feature-c", function(variant)
-  if variant:IsEnabled() then
+client:WatchToggle("feature-c", function(toggle)
+  if toggle:IsEnabled() then
     -- feature-c가 활성화되면 실행할 코드
   else
     -- feature-c가 비활성화되면 실행할 코드
@@ -249,7 +249,7 @@ client:On(Togglet.Events.IMPRESSION, function(event)
     eventType = event.eventType,
     variantName = event.variantName
   })
-})
+end)
 ```
 
 ### 노출 데이터 활용 사례
@@ -388,38 +388,36 @@ function optimizeGraphicsSettings()
   -- 디바이스 정보 컨텍스트 설정
   local deviceInfo = getDeviceInfo()
 
-  client:UpdateContext({
-    properties = {
-      deviceModel = deviceInfo.model,
-      gpuTier = classifyGpuTier(deviceInfo.gpu),
-      memoryGB = deviceInfo.totalMemoryGB,
-      cpuCores = deviceInfo.cpuCores,
-      osVersion = deviceInfo.osVersion
-    }
+  client:SetContextFields({
+    deviceModel = deviceInfo.model,
+    gpuTier = classifyGpuTier(deviceInfo.gpu),
+    memoryGB = deviceInfo.totalMemoryGB,
+    cpuCores = deviceInfo.cpuCores,
+    osVersion = deviceInfo.osVersion
   }, function()
     -- 고사양 그래픽 기능
     if client:IsEnabled("high-end-graphics") then
       enableHighEndGraphics()
-    } else {
+    else
       enableBasicGraphics()
-    }
+    end
 
     -- 그래픽 세부 설정
-    local graphicsConfig = client:GetVariant("graphics-config")
+    local graphicsConfig = client:GetToggle("graphics-config")
     if graphicsConfig:IsEnabled() then
       local config = graphicsConfig:JsonVariation({})
       setRenderDistance(config.renderDistance)
       setShadowQuality(config.shadowQuality)
       setTextureQuality(config.textureQuality)
       setAntiAliasing(config.antiAliasing)
-    }
+    end
 
     -- 프레임 레이트 제한
     if client:IsEnabled("fps-limit") then
       setFrameRateLimit(client:NumberVariation("fps-limit-value", 60))
-    }
-  })
-}
+    end
+  end)
+end
 ```
 
 ### 사례: 네트워크 최적화
@@ -429,28 +427,26 @@ function optimizeNetworkSettings()
   -- 네트워크 상태 확인
   local networkInfo = getNetworkInfo()
 
-  client:UpdateContext({
-    properties = {
-      connectionType = networkInfo.connectionType, -- wifi, cellular, ethernet
-      bandwidth = networkInfo.estimatedBandwidth,
-      latency = networkInfo.averageLatency
-    }
+  client:SetContextFields({
+    connectionType = networkInfo.connectionType, -- wifi, cellular, ethernet
+    bandwidth = networkInfo.estimatedBandwidth,
+    latency = networkInfo.averageLatency
   }, function()
     -- 데이터 사용량 최적화
     if client:IsEnabled("data-saving-mode") then
       enableLowDataMode()
-    }
+    end
 
     -- 네트워크 설정
-    local networkConfig = client:GetVariant("network-config")
+    local networkConfig = client:GetToggle("network-config")
     if networkConfig:IsEnabled() then
       local config = networkConfig:JsonVariation({})
       setUpdateFrequency(config.updateFrequency)
       setPacketSize(config.packetSize)
       setCompressionLevel(config.compressionLevel)
-    }
-  })
-}
+    end
+  end)
+end
 ```
 
 ## 8. 명시적 동기화 모드 활용
@@ -477,7 +473,7 @@ function startGameSession()
 
     -- 게임 세션 중에는 플래그 변경 없이 일관된 경험 제공
   end)
-}
+end
 
 -- 게임 세션 종료 후 다시 동기화
 function endGameSession()
@@ -489,7 +485,7 @@ function endGameSession()
     print("게임 세션 종료 후 최신 기능 플래그 적용")
     returnToLobby()
   end)
-}
+end
 ```
 
 ### 사례: 레벨/맵 전환 시 동기화
@@ -511,7 +507,7 @@ function changeLevel(newLevelId)
     loadLevel(newLevelId, hasNewFeatures)
     hideLoadingScreen()
   end)
-}
+end
 ```
 
 ## 9. 부트스트래핑 활용
@@ -576,12 +572,12 @@ function initializeFeatureFlags()
     client:Start(function()
       print("온라인 모드로 피처 플래그 초기화 완료")
     end)
-  } else {
+  else
     print("오프라인 모드로 피처 플래그 초기화 완료")
-  }
+  end
 
   return client
-}
+end
 ```
 
 ### 사례: 빠른 게임 시작
@@ -614,7 +610,7 @@ function quickStartGame()
     -- 필요한 경우 설정 업데이트
     updateGameSettings()
   end)
-}
+end
 ```
 
 ## 10. 실시간 이벤트 및 프로모션
@@ -626,7 +622,7 @@ function quickStartGame()
 ```lua
 function checkPromotions()
   if client:IsEnabled("flash-sale") then
-    local saleConfig = client:GetVariant("flash-sale-config")
+    local saleConfig = client:GetToggle("flash-sale-config")
     if saleConfig:IsEnabled() then
       local config = saleConfig:JsonVariation({
         discountPercent: 30,
@@ -635,9 +631,9 @@ function checkPromotions()
       })
 
       applyFlashSale(config)
-    }
-  }
-}
+    end
+  end
+end
 ```
 
 
@@ -924,13 +920,13 @@ function onFeatureFlagsUpdated()
   -- 플래그가 변경되면 즉시 UI 재구성
   if client:IsEnabled("new-ui-layout") then
     switchToNewUILayout()  -- 사용자가 메뉴 탐색 중일 때 혼란 야기
-  }
+  end
 
   -- 게임 규칙 변경
   if client:IsEnabled("updated-game-rules") then
     applyNewGameRules()  -- 게임 중 규칙 변경으로 혼란 야기
-  }
-}
+  end
+end
 ```
 
 ### 모범 사례
@@ -951,7 +947,7 @@ function onLevelCompleted()
     -- 이제 다음 레벨에 새 기능 적용
     prepareNextLevel()
   end)
-}
+end
 ```
 
 2. **자연스러운 전환점 활용**
@@ -964,11 +960,11 @@ function onMainMenuEntered()
     -- UI 업데이트
     if client:IsEnabled("new-ui-layout") then
       initializeNewUILayout()
-    } else {
+    else
       initializeClassicUILayout()
-    }
-  })
-}
+    end
+  end)
+end
 
 function onMatchEnded()
   -- 매치 종료 후 플래그 동기화
@@ -976,11 +972,11 @@ function onMatchEnded()
     -- 다음 매치에 새 규칙 적용
     if client:IsEnabled("updated-game-rules") then
       prepareNewGameRules()
-    } else {
+    else
       prepareClassicGameRules()
-    }
-  })
-}
+    end
+  end)
+end
 ```
 
 ## 6. 네트워크 요청 최적화
@@ -994,13 +990,15 @@ function onMatchEnded()
 function update(dt)
   -- 매 프레임마다 위치 업데이트
   local playerPosition = getPlayerPosition()
-  client:SetContextField("playerX", playerPosition.x)
-  client:SetContextField("playerY", playerPosition.y)
-  client:SetContextField("playerZ", playerPosition.z)
+  client:SetContextFields({
+    playerX = playerPosition.x,
+    playerY = playerPosition.y,
+    playerZ = playerPosition.z
+  })
 
   -- 매 프레임마다 시간 업데이트
   client:SetContextField("currentTime", os.time())
-}
+end
 ```
 
 ### 모범 사례
@@ -1018,13 +1016,11 @@ function update(dt)
   -- 5초마다 위치 업데이트
   if currentTime - lastPositionUpdate > 5 then
     local playerPosition = getPlayerPosition()
-    client:UpdateContext({
-      properties = {
-        playerPosition = {
-          x = playerPosition.x,
-          y = playerPosition.y,
-          z = playerPosition.z
-        }
+    client:SetContextFields({
+      playerPosition = {
+        x = playerPosition.x,
+        y = playerPosition.y,
+        z = playerPosition.z
       }
     })
     lastPositionUpdate = currentTime
@@ -1035,7 +1031,7 @@ function update(dt)
     client:SetContextField("currentTime", currentTime)
     lastTimeUpdate = currentTime
   end
-}
+end
 ```
 
 2. **중요한 변경 사항만 업데이트**
@@ -1057,7 +1053,7 @@ function checkPlayerZone()
     end)
     lastPlayerZone = currentZone
   end
-}
+end
 ```
 
 ## 7. 오류 처리 및 폴백 전략
@@ -1072,8 +1068,8 @@ function initializeGame()
   -- 피처 플래그 초기화 실패 시 게임이 중단될 수 있음
   client:Start(function()
     startGame()
-  })
-}
+  end)
+end
 ```
 
 ### 모범 사례
@@ -1091,13 +1087,13 @@ function initializeFeatureFlags()
 
     -- 기본값으로 폴백
     useDefaultFeatures()
-  })
+  end)
 
   client:Start(function()
     print("피처 플래그 초기화 성공")
     startGame()
-  })
-}
+  end)
+end
 ```
 
 2. **부트스트랩 데이터로 폴백**
@@ -1126,14 +1122,14 @@ function initializeGame()
   local initTimeout = setTimeout(function()
     print("피처 플래그 초기화 타임아웃, 기본값 사용")
     startGameWithDefaultFeatures()
-  }, 5000)  -- 5초 타임아웃
+  end, 5000)  -- 5초 타임아웃
 
   client:Start(function()
     clearTimeout(initTimeout)
     print("피처 플래그 초기화 성공")
     startGame()
-  })
-}
+  end)
+end
 ```
 
 ## 8. 보안 고려 사항
@@ -1144,23 +1140,23 @@ function initializeGame()
 
 ```lua
 -- 나쁜 예: 민감한 정보 포함
-client:UpdateContext({
+client:SetContextFields({
   userId = "user123",
-  properties = {
-    authToken = "eyJhbGciOiJIUzI1...",  -- 민감한 정보
-    email = "user@example.com",         -- 개인 식별 정보
-    purchaseHistory = { ... }           -- 민감한 정보
-  }
+  authToken = "eyJhbGciOiJIUzI1...",  -- 민감한 정보
+  email = "user@example.com",         -- 개인 식별 정보
+  purchaseHistory = { ... }           -- 민감한 정보
 })
+```
 
--- 나쁜 예: 중요한 게임 로직을 클라이언트 측 플래그에 의존
+```typescript
+// 나쁜 예: 중요한 게임 로직을 클라이언트 측 플래그에 의존
 function calculateRewards(score) {
   if client:IsEnabled("double-rewards") then
-    return score * 2  -- 클라이언트에서 조작 가능
+    return score * 2  // 클라이언트에서 조작 가능
   } else {
     return score
   }
-}
+end
 ```
 
 ### 모범 사례
@@ -1169,13 +1165,11 @@ function calculateRewards(score) {
 
 ```lua
 -- 좋은 예: 안전한 정보만 포함
-client:UpdateContext({
+client:SetContextFields({
   userId = "user123",
-  properties = {
-    userTier = "premium",      -- 민감하지 않은 정보
-    hasCompletedTutorial = true,
-    deviceCategory = "high-end"
-  }
+  userTier = "premium",      -- 민감하지 않은 정보
+  hasCompletedTutorial = true,
+  deviceCategory = "high-end"
 })
 ```
 
@@ -1183,24 +1177,26 @@ client:UpdateContext({
 
 ```lua
 -- 좋은 예: 중요한 로직은 서버 측에서 처리
-function submitScore(score) {
+function submitScore(score)
   -- 점수를 서버로 전송하고 서버에서 보상 계산
   sendToServer("submit_score", {
     score = score,
     level = currentLevel,
     timestamp = os.time()
   })
-}
+end
+```
 
--- 서버에서 피처 플래그 확인 후 보상 계산
--- server-side code (pseudo):
--- function calculateRewards(userId, score) {
---   if isFeatureEnabled("double-rewards", userId) {
---     return score * 2
---   } else {
---     return score
---   }
--- }
+```typescript
+// 서버에서 피처 플래그 확인 후 보상 계산
+// server-side code (pseudo):
+function calculateRewards(userId, score) {
+  if isFeatureEnabled("double-rewards", { userId }) {
+    return score * 2
+  } else {
+    return score
+  }
+ }
 ```
 
 ## 9. 사용자 피드백 및 모니터링
@@ -1211,11 +1207,11 @@ function submitScore(score) {
 
 ```lua
 -- 나쁜 예: 모니터링 부재
-function enableNewFeature() {
+function enableNewFeature()
   if client:IsEnabled("new-feature") then
     showNewFeature()  -- 문제가 발생해도 알 수 없음
-  }
-}
+  end
+end
 ```
 
 ### 모범 사례
@@ -1224,7 +1220,7 @@ function enableNewFeature() {
 
 ```lua
 -- 좋은 예: 노출 이벤트 추적
-function checkNewFeature() {
+function checkNewFeature()
   if client:IsEnabled("new-feature") then
     -- 노출 이벤트 기록
     client:RecordImpression("new-feature")
@@ -1236,23 +1232,22 @@ function checkNewFeature() {
     })
 
     showNewFeature()
-  }
-}
+  end
+end
 ```
 
 2. **사용자 피드백 수집**
 
 ```lua
 -- 좋은 예: 사용자 피드백 수집
-function showNewFeature() {
+function showNewFeature()
   -- 피드백 폼 표시
-  showFeedbackForm("new-feature", function(feedback) {
+  showFeedbackForm("new-feature", function(feedback)
     -- 피드백 전송
     sendFeedbackToServer("new-feature", feedback)
-  })
-}
+  end)
+end
 ```
-
 
 
 # 피처 플래그 노출 데이터(Impression Data)
@@ -1282,7 +1277,7 @@ client:On(Togglet.Events.IMPRESSION, function(event)
     eventType = event.eventType,
     variantName = event.variantName
   })
-})
+end)
 ```
 
 ### 노출 데이터 활용 사례
@@ -1347,7 +1342,7 @@ client:On(Togglet.Events.IMPRESSION, function(event)
   if event.variantName then
     print("변형:", event.variantName)
   end
-})
+end)
 ```
 
 ## 노출 데이터 예제
@@ -1372,7 +1367,7 @@ function checkNewFeature()
   else
     initializeLegacyCombatSystem()
   end
-}
+end
 ```
 
 ### 변형(Variant) 노출
@@ -1380,10 +1375,10 @@ function checkNewFeature()
 ```lua
 -- GetVariant 호출 시 노출 데이터 생성
 function initializeTutorial()
-  local tutorialVariant = client:GetVariant("tutorial-version")
+  local tutorialToggle = client:GetToggle("tutorial-version")
 
-  if tutorialVariant:IsEnabled() then
-    local version = tutorialVariant:StringVariation("default")
+  if tutorialToggle:IsEnabled() then
+    local version = tutorialToggle:StringVariation("default")
 
     -- 이 호출은 다음과 같은 노출 이벤트를 생성합니다:
     -- {
@@ -1406,7 +1401,7 @@ function initializeTutorial()
   else
     showDefaultTutorial()
   end
-}
+end
 ```
 
 ## 노출 데이터 활용 사례
@@ -1432,7 +1427,7 @@ client:On(Togglet.Events.IMPRESSION, function(event)
       })
     end
   end
-})
+end)
 ```
 
 ### 2. A/B 테스트 결과 분석
@@ -1450,7 +1445,7 @@ client:On(Togglet.Events.IMPRESSION, function(event)
     -- 나중에 구매 전환율과 연결하여 분석
     -- 예: 각 변형별 구매 전환율 = 구매 수 / 노출 수
   end
-})
+end)
 
 -- 구매 이벤트 발생 시
 function onPurchaseCompleted(userId, amount)
@@ -1459,7 +1454,7 @@ function onPurchaseCompleted(userId, amount)
     userId = userId,
     amount = amount
   })
-}
+end
 ```
 
 ### 3. 기능 사용 패턴 분석
@@ -1487,7 +1482,7 @@ client:On(Togglet.Events.IMPRESSION, function(event)
       })
     end
   end
-})
+end)
 ```
 
 ### 4. 디버깅 및 문제 해결
@@ -1512,7 +1507,7 @@ client:On(Togglet.Events.IMPRESSION, function(event)
       logToFile("feature_flags_debug.log", Util.Inspect(event))
     end
   end
-})
+end)
 ```
 
 ## 노출 데이터 최적화
@@ -1547,7 +1542,7 @@ client:On(Togglet.Events.IMPRESSION, function(event)
       sampled = true
     })
   end
-})
+end)
 ```
 
 ### 3. 배치 처리
@@ -1575,7 +1570,7 @@ client:On(Togglet.Events.IMPRESSION, function(event)
   if #impressionBatch >= MAX_BATCH_SIZE then
     sendImpressionBatch()
   end
-})
+end)
 
 -- 주기적으로 배치 전송
 function setupBatchTimer()

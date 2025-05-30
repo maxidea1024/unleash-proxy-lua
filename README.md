@@ -4,7 +4,7 @@
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Lua](https://img.shields.io/badge/lua-5.1%2B-blue.svg)](https://www.lua.org/)
 
-This is a Lua SDK for Togglet feature flags. It provides a simple and powerful way to manage feature toggles in your Lua applications, including games, web applications, and server applications.
+This is a Lua SDK for Togglet feature flags. It provides a simple and powerful way to manage feature flags in your Lua applications, including games, web applications.
 
 ## How to use the SDK
 
@@ -111,26 +111,26 @@ client:SetContextField('userId', '4141')
 client:RemoveContextField('customProperty')
 ```
 
-### Alternative: Using ToggletConfigBuilder
+### Alternative: Using ToggletClientBuilder
 
-For more systematic and flexible configuration, you can use ToggletConfigBuilder:
+For more systematic and flexible configuration, you can use ToggletClientBuilder:
 
 ```lua
 local Togglet = require("framework.3rdparty.togglet.index")
-local ToggletConfigBuilder = Togglet.ToggletConfigBuilder
+local ToggletClientBuilder = Togglet.ToggletClientBuilder
 
 -- Basic online mode configuration
-local client = ToggletConfigBuilder.New("your-app-name")
+local client = ToggletClientBuilder.New("your-app-name")
     :Url("https://your-togglet-server.com/api")
     :ClientKey("your-client-key")
     :Request(httpRequest)
     :Environment("production")
-    :RefreshInterval(30)
+    :RefreshInterval(15)
     :LogLevel("info")
-    :NewClient()
+    :Build()
 
 -- Offline mode configuration
-local offlineClient = ToggletConfigBuilder.New("your-app-name")
+local offlineClient = ToggletClientBuilder.New("your-app-name")
     :Offline(true)
     :Bootstrap({
       { name = "feature-a", enabled = true },
@@ -138,7 +138,7 @@ local offlineClient = ToggletConfigBuilder.New("your-app-name")
     })
     :DevMode(true)
     :LogLevel("debug")
-    :NewClient()
+    :Build()
 ```
 
 ## Available options
@@ -249,22 +249,6 @@ client:UpdateToggles():Next(function()
 end)
 ```
 
-## About
-
-This is a Lua SDK for Togglet feature flags. It provides a simple and powerful way to manage feature toggles in your Lua applications.
-
-### Resources
-
-- [Readme](#readme)
-
-### License
-
-[MIT license](LICENSE)
-
-### Stars
-
-⭐ Star this repository if you find it useful!
-
 ### Contributing
 
 1. Fork the repository
@@ -272,3 +256,7 @@ This is a Lua SDK for Togglet feature flags. It provides a simple and powerful w
 3. Commit your changes (`git commit -m 'Add some amazing feature'`)
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
+
+### License
+
+[MIT license](LICENSE)
