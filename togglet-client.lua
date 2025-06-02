@@ -16,6 +16,7 @@ local ErrorHelper = require("framework.3rdparty.togglet.error-helper")
 local SdkVersion = require("framework.3rdparty.togglet.sdk-version")
 local Validation = require("framework.3rdparty.togglet.validation")
 local Promise = require("framework.3rdparty.togglet.promise")
+local WatchToggleGroup = require("framework.3rdparty.togglet.watch-toggle-group")
 
 local STATIC_CONTEXT_FIELDS = {
   appName = true,
@@ -136,30 +137,26 @@ function ToggletClient.New(config)
   self.storage = config.storageProvider or InMemoryStorageProvider.New(self.loggerFactory)
   self.impressionDataAll = config.impressionDataAll or false
 
-  if self.offline then
-    self.refreshInterval = 0
-  else
-    self.url = type(config.url) == "string" and config.url or config.url
-    self.clientKey = config.clientKey
-    self.headerName = config.headerName or "Authorization"
-    self.customHeaders = config.customHeaders or {}
-    self.request = config.request
-    self.usePOSTrequests = config.usePOSTrequests or false
-    self.refreshInterval = (config.disableRefresh and 0) or (config.refreshInterval or 15)
+  self.url = type(config.url) == "string" and config.url or config.url
+  self.clientKey = config.clientKey
+  self.headerName = config.headerName or "Authorization"
+  self.customHeaders = config.customHeaders or {}
+  self.request = config.request
+  self.usePOSTrequests = config.usePOSTrequests or false
+  self.refreshInterval = (self.offline and 0) or (config.disableRefresh and 0) or (config.refreshInterval or 15)
 
-    self.backoffParams = {
-      min = config.backoff and config.backoff.min or 1,
-      max = config.backoff and config.backoff.max or 10,
-      factor = config.backoff and config.backoff.factor or 2,
-      jitter = config.backoff and config.backoff.jitter or 0.2
-    }
-    self.fetchFailures = 0
-    self.fetchingContext = nil
-    self.fetchingContextVersion = self.contextVersion
-    self.fetching = false
-  end
+  self.backoffParams = {
+    min = config.backoff and config.backoff.min or 1,
+    max = config.backoff and config.backoff.max or 10,
+    factor = config.backoff and config.backoff.factor or 2,
+    jitter = config.backoff and config.backoff.jitter or 0.2
+  }
+  self.fetchFailures = 0
+  self.fetchingContext = nil
+  self.fetchingContextVersion = self.contextVersion
+  self.fetching = false
 
-  local metricsDisabled = config.disableMetrics or false
+  local metricsDisabled = self.offline or (config.disableMetrics or false)
   if not metricsDisabled then
     self.metricsReporter = MetricsReporter.New({
       client = self,
@@ -262,10 +259,8 @@ function ToggletClient:Start()
       :Next(function()
         return self:initialFetchToggles()
             :Next(function()
-              if self.metricsReporter then
-                self.logger:Debug("✅ Starting metrics reporter")
-                self.metricsReporter:Start()
-              end
+              self.logger:Debug("✅ Starting metrics reporter")
+              self.metricsReporter:Start()
 
               self.logger:Info("🌀 ToggletClient started")
             end)
@@ -463,8 +458,8 @@ function ToggletClient:BoolVariation(featureName, defaultValue, forceSelectRealt
   return self:GetToggle(featureName, forceSelectRealtimeToggle):BoolVariation(defaultValue)
 end
 
-function ToggletClient:NumberVariation(featureName, defaultValue, forceSelectRealtimeToggle)
-  return self:GetToggle(featureName, forceSelectRealtimeToggle):NumberVariation(defaultValue)
+function ToggletClient:NumberVariation(featureName, defaultValue, min, max, forceSelectRealtimeToggle)
+  return self:GetToggle(featureName, forceSelectRealtimeToggle):NumberVariation(defaultValue, min, max)
 end
 
 function ToggletClient:StringVariation(featureName, defaultValue, forceSelectRealtimeToggle)
@@ -522,49 +517,10 @@ function ToggletClient:WatchToggle(featureName, callback, owner)
   self.logger:Debug("👀 WatchToggle: feature=`%s`, enabled=%s", featureName, toggle:IsEnabled())
 
   local eventName = "update:" .. featureName
-
-  -- owner 객체가 제공된 경우 약한 참조로 등록
-  if owner then
-    -- 객체가 테이블인지 확인
-    if type(owner) ~= "table" then
-      self.logger:Warn("Owner must be a table object, using standard event registration instead")
-      return self.eventEmitter:On(eventName, callback)
-    end
-
-    -- 약한 참조 이벤트 리스너 생성
-    local weakCallback = function(...)
-      if owner then  -- owner가 아직 존재하는지 확인
-        callback(...)
-      end
-    end
-
-    -- 객체 소멸 시 자동 정리를 위한 메타테이블 설정
-    if not getmetatable(owner) or not getmetatable(owner).__gc then
-      -- 이미 메타테이블이 있는 경우 기존 __gc 함수 보존
-      local mt = getmetatable(owner) or {}
-      local oldGc = mt.__gc
-
-      mt.__gc = function(instance)
-        -- 이벤트 리스너 제거
-        self:UnwatchToggle(featureName, weakCallback)
-
-        -- 기존 __gc 함수가 있으면 호출
-        if oldGc then
-          oldGc(instance)
-        end
-      end
-
-      setmetatable(owner, mt)
-    end
-
-    return self.eventEmitter:OnWeak(eventName, weakCallback)
-  end
-
-  -- owner가 없는 경우 기존 방식으로 등록
   return self.eventEmitter:On(eventName, callback)
 end
 
-function ToggletClient:WatchToggleWithInitialState(featureName, callback, owner)
+function ToggletClient:WatchToggleWithInitialState(featureName, callback)
   if self.offline then return function() end end
 
   Validation.RequireName(featureName, "featureName", "ToggletClient:WatchToggleWithInitialState")
@@ -572,101 +528,23 @@ function ToggletClient:WatchToggleWithInitialState(featureName, callback, owner)
 
   local eventName = "update:" .. featureName
 
-  -- owner 객체가 제공된 경우 약한 참조로 등록
-  if owner then
-    -- 객체가 테이블인지 확인
-    if type(owner) ~= "table" then
-      self.logger:Warn("Owner must be a table object, using standard event registration instead")
+  local off = self.eventEmitter:On(eventName, callback)
 
-      -- 기존 방식으로 등록
-      local off = self.eventEmitter:On(eventName, callback)
-
-      -- 초기 상태 처리
-      if self.readyEventEmitted then
-        local toggle = self:GetToggle(featureName, true)
-        self.logger:Debug("👀 WatchToggleWithInitialState: feature=`%s`, enabled=%s", featureName, toggle:IsEnabled())
-        self.eventEmitter:Emit(eventName, toggle)
-      else
-        self.logger:Debug("👀 WatchToggleWithInitialState: Waiting for `ready` event. feature=`%s`", featureName)
-
-        self:Once(Events.READY, function()
-          local toggle = self:GetToggle(featureName, true)
-          self.logger:Debug("👀 WatchToggleWithInitialState(Pended): feature=`%s`, enabled=%s", featureName, toggle:IsEnabled())
-          self.eventEmitter:Emit(eventName, toggle)
-        end)
-      end
-
-      return off
-    end
-
-    -- 약한 참조 이벤트 리스너 생성
-    local weakCallback = function(...)
-      if owner then  -- owner가 아직 존재하는지 확인
-        callback(...)
-      end
-    end
-
-    -- 객체 소멸 시 자동 정리를 위한 메타테이블 설정
-    if not getmetatable(owner) or not getmetatable(owner).__gc then
-      -- 이미 메타테이블이 있는 경우 기존 __gc 함수 보존
-      local mt = getmetatable(owner) or {}
-      local oldGc = mt.__gc
-
-      mt.__gc = function(instance)
-        -- 이벤트 리스너 제거
-        self:UnwatchToggle(featureName, weakCallback)
-
-        -- 기존 __gc 함수가 있으면 호출
-        if oldGc then
-          oldGc(instance)
-        end
-      end
-
-      setmetatable(owner, mt)
-    end
-
-    -- 약한 참조로 이벤트 등록
-    local off = self.eventEmitter:OnWeak(eventName, weakCallback)
-
-    -- 초기 상태 처리
-    if self.readyEventEmitted then
-      local toggle = self:GetToggle(featureName, true)
-      self.logger:Debug("👀 WatchToggleWithInitialState: feature=`%s`, enabled=%s", featureName, toggle:IsEnabled())
-      self.eventEmitter:Emit(eventName, toggle)
-    else
-      self.logger:Debug("👀 WatchToggleWithInitialState: Waiting for `ready` event. feature=`%s`", featureName)
-
-      self:Once(Events.READY, function()
-        if owner then  -- owner가 아직 존재하는지 확인
-          local toggle = self:GetToggle(featureName, true)
-          self.logger:Debug("👀 WatchToggleWithInitialState(Pended): feature=`%s`, enabled=%s", featureName, toggle:IsEnabled())
-          self.eventEmitter:Emit(eventName, toggle)
-        end
-      end)
-    end
-
-    return off
+  if self.readyEventEmitted then
+    local toggle = self:GetToggle(featureName, true)
+    self.logger:Debug("👀 WatchToggleWithInitialState: feature=`%s`, enabled=%s", featureName, toggle:IsEnabled())
+    self.eventEmitter:Emit(eventName, toggle)
   else
-    -- owner가 없는 경우 기존 방식으로 등록
-    local off = self.eventEmitter:On(eventName, callback)
+    self.logger:Debug("👀 WatchToggleWithInitialState: Waiting for `ready` event. feature=`%s` enabled=?", featureName)
 
-    -- 초기 상태 처리 (기존 코드)
-    if self.readyEventEmitted then
+    self:Once(Events.READY, function()
       local toggle = self:GetToggle(featureName, true)
-      self.logger:Debug("👀 WatchToggleWithInitialState: feature=`%s`, enabled=%s", featureName, toggle:IsEnabled())
+      self.logger:Debug("👀 WatchToggleWithInitialState(Pended): feature=`%s`, enabled=%s", featureName, toggle:IsEnabled())
       self.eventEmitter:Emit(eventName, toggle)
-    else
-      self.logger:Debug("👀 WatchToggleWithInitialState: Waiting for `ready` event. feature=`%s`", featureName)
-
-      self:Once(Events.READY, function()
-        local toggle = self:GetToggle(featureName, true)
-        self.logger:Debug("👀 WatchToggleWithInitialState(Pended): feature=`%s`, enabled=%s", featureName, toggle:IsEnabled())
-        self.eventEmitter:Emit(eventName, toggle)
-      end)
-    end
-
-    return off
+    end)
   end
+
+  return off
 end
 
 function ToggletClient:UnwatchToggle(featureName, callback)
@@ -681,6 +559,20 @@ function ToggletClient:UnwatchToggle(featureName, callback)
   self.eventEmitter:Off(eventName, callback)
 end
 
+function ToggleClient:CreateWatchToggleGroup()
+  return WatchToggleGroup.New(self)
+end
+
+-- local watchToggleGroup = toggletClient:CreateWatchToggleGroup()
+--
+-- watchToggleGroup:WatchToggle("...", function(toggle) end)
+-- watchToggleGroup:WatchToggle("...", function(toggle) end)
+-- watchToggleGroup:WatchToggle("...", function(toggle) end)
+-- watchToggleGroup:WatchToggle("...", function(toggle) end)
+-- watchToggleGroup:WatchToggle("...", function(toggle) end)
+--
+-- watchToggleGroup:UnwatchAll()
+
 function ToggletClient:UpdateToggles()
   if self.offline then
     return Promise.Completed()
@@ -689,6 +581,7 @@ function ToggletClient:UpdateToggles()
   if self.fetching then
     local promise = Promise.New()
     if self.fetchingContextVersion ~= self.contextVersion then
+      -- FIXME 요청을 계속 쌓아봐야 마지막만 의미가 있다. 개선의 여지가 있다.
       self:Once(Events.FETCH_COMPLETED, function()
         self:UpdateToggles():Next(function()
           promise:Resolve()
@@ -767,7 +660,7 @@ function ToggletClient:SetContextFields(fields)
   end
 
   local changeds = self:updateContextFields(fields);
-  if self.readyEventEmitted and changeds then
+  if self.readyEventEmitted and changeds > 0 then
     return self:UpdateToggles()
   else
     return Promise.Completed()
@@ -1010,7 +903,7 @@ function ToggletClient:getHeaders()
   end
 
   for name, value in pairs(self.customHeaders) do
-    if value then -- discard nil
+    if value then
       headers[name] = value
     end
   end
@@ -1204,6 +1097,7 @@ function ToggletClient:fetchToggles(retry)
   return promise
 end
 
+-- 재시도중에는 fetching이 true임.
 function ToggletClient:handleFetchResponse(url, method, headers, body, response, promise)
   if response.status >= 200 and response.status <= 299 or response.status == 304 then
     self.fetching = false

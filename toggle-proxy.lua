@@ -71,7 +71,7 @@ function ToggleProxy:BoolVariation(defaultValue)
   return self.variant.feature_enabled or defaultValue
 end
 
-function ToggleProxy:NumberVariation(defaultValue)
+function ToggleProxy:NumberVariation(defaultValue, min, max)
   Validation.RequireNumber(defaultValue, "defaultValue", "NumberVariation")
 
   local isPayloadValid, payloadValue = validatePayload(self, "number", defaultValue)
