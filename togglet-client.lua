@@ -585,7 +585,7 @@ function ToggletClient:UpdateToggles()
   if self.fetching then
     local promise = Promise.New()
     if self.fetchingContextVersion ~= self.contextVersion then
-      -- FIXME 요청을 계속 쌓아봐야 마지막만 의미가 있다. 개선의 여지가 있다.
+      -- FIXME 요청을 계속 쌓아봐야 마지막만 의미가 있다. 마지막 요청만 인정하는 형태면 좋을듯하다. 개선의 여지가 있다.
       self:Once(Events.FETCH_COMPLETED, function()
         self:UpdateToggles():Next(function()
           promise:Resolve()
