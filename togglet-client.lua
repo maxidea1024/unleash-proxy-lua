@@ -673,6 +673,7 @@ function ToggletClient:UnwatchToggle(featureName, callback)
   if self.offline then return end
 
   Validation.RequireName(featureName, "featureName", "ToggletClient:UnwatchToggle")
+  Validation.RequireFunction(callback, "callback", "ToggletClient:UnwatchToggle")
 
   self.logger:Debug("UnwatchToggle: feature=`%s`")
 
