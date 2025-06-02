@@ -257,7 +257,7 @@ function Promise.Race(...)
   local promises = { ... }
   local promise = Promise.New()
 
-  Promise.all(...):Next(nil, function(value)
+  Promise.All(...):Next(nil, function(value)
     reject(promise, value)
   end)
 
@@ -273,21 +273,15 @@ function Promise.Race(...)
 end
 
 function Promise.Completed()
-  local promise = Promise.New()
-  promise:Resolve(true)
-  return promise
+  return Promise.New():Resolve(true)
 end
 
 function Promise.FromResult(result)
-  local promise = Promise.New()
-  promise:Resolve(result)
-  return promise
+  return Promise.New():Resolve(result)
 end
 
 function Promise.FromError(error)
-  local promise = Promise.New()
-  promise:Reject(error)
-  return promise
+  return Promise.New():Reject(error)
 end
 
 return Promise
