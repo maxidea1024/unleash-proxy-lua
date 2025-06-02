@@ -1,10 +1,12 @@
 -- TODO 로깅 정리(단순화, 현재는 지나치게 복잡함)
 -- TODO fetchToggles() 시에 재시도 처리 정리(재시도 상황은 하나의 fetch가 여전히 진행중으로 봐야함)
--- TODO 용어정리. featur, flag, toggle ?  어떤게 자연스러운걸까? featureName으로 찾는게 맞다면, getToggle이 아니라 getFeature가 맞지 않을까?
+-- FIXME 404일때 재시도를 안하고 바로 에러처리가 된다. 왜일까?
+-- FIXME fetch 중 timeout이 30초로 되어 있어서, 반응이 없을 경우 30초동안 대기하는 상황이 발생한다.
 
 local Json = require("framework.3rdparty.togglet.dkjson")
 local Timer = require("framework.3rdparty.togglet.timer")
 local MetricsReporter = require("framework.3rdparty.togglet.metrics-reporter")
+local MetricsReporterNoop = require("framework.3rdparty.togglet.metrics-reporter-noop")
 local InMemoryStorageProvider = require("framework.3rdparty.togglet.storage-provider-inmemory")
 local EventEmitter = require("framework.3rdparty.togglet.event-emitter")
 local Util = require("framework.3rdparty.togglet.util")
@@ -104,7 +106,7 @@ function ToggletClient.New(config)
   self.connectionId = Util.UuidV4()
   self.bootstrap = config.bootstrap
   self.bootstrapOverride = config.bootstrapOverride ~= false
-  self.experimental = Util.DeepClone(config.experimental or {})
+  self.experimental = Util.Clone(config.experimental or {})
   self.lastRefreshTimestamp = 0
   self.etag = nil
   self.readyEventEmitted = false
@@ -114,7 +116,7 @@ function ToggletClient.New(config)
 
   self.realtimeTogglesMap = convertTogglesArrayToMap(config.bootstrap or {})
   self.useExplicitSyncMode = config.useExplicitSyncMode or false
-  self.synchronizedTogglesMap = Util.DeepClone(self.realtimeTogglesMap)
+  self.synchronizedTogglesMap = Util.Clone(self.realtimeTogglesMap)
   self.lastSynchronizedETag = nil
 
   self.context = {
@@ -124,6 +126,7 @@ function ToggletClient.New(config)
     currentTime = config.context and config.context.currentTime,
     properties = config.context and config.context.properties,
   }
+  self.contextVersion = 1
 
   self.eventEmitter = EventEmitter.New({
     loggerFactory = self.loggerFactory,
@@ -136,7 +139,6 @@ function ToggletClient.New(config)
   self.impressionDataAll = config.impressionDataAll or false
 
   if self.offline then
-    self.metricsReporter = nil
     self.refreshInterval = 0
   else
     self.url = type(config.url) == "string" and config.url or config.url
@@ -154,9 +156,13 @@ function ToggletClient.New(config)
       jitter = config.backoff and config.backoff.jitter or 0.2
     }
     self.fetchFailures = 0
-    self.fetchingContextHash = nil
+    self.fetchingContext = nil
+    self.fetchingContextVersion = self.contextVersion
     self.fetching = false
+  end
 
+  local metricsDisabled = config.disableMetrics or false
+  if not metricsDisabled then
     self.metricsReporter = MetricsReporter.New({
       client = self,
       connectionId = self.connectionId,
@@ -166,7 +172,6 @@ function ToggletClient.New(config)
       clientKey = config.clientKey,
       headerName = self.headerName,
       customHeaders = self.customHeaders,
-      disableMetrics = config.disableMetrics or false,
       metricsIntervalInitial = config.metricsIntervalInitial or 2,
       metricsInterval = config.metricsInterval or 60,
       onError = function(err) self:emit(Events.ERROR, err) end,
@@ -174,6 +179,8 @@ function ToggletClient.New(config)
       timer = self.timer,
       loggerFactory = self.loggerFactory,
     })
+  else
+    self.metricsReporter = MetricsReporterNoop.New()
   end
 
   self:registerEventHandlers(config)
@@ -303,7 +310,7 @@ function ToggletClient:init()
         self.logger:Debug("✅ Toggles loaded: %s", toggleArray and "found" or "not found")
 
         self.realtimeTogglesMap = convertTogglesArrayToMap(toggleArray or {})
-        self.synchronizedTogglesMap = Util.DeepClone(self.realtimeTogglesMap)
+        self.synchronizedTogglesMap = Util.Clone(self.realtimeTogglesMap)
         return self.storage:Load(ETAG_KEY)
       end)
       :Next(function(etag)
@@ -323,7 +330,7 @@ function ToggletClient:init()
           return self.storage:Store(TOGGLES_KEY, self.bootstrap)
               :Next(function()
                 self.realtimeTogglesMap = convertTogglesArrayToMap(self.bootstrap)
-                self.synchronizedTogglesMap = Util.DeepClone(self.realtimeTogglesMap)
+                self.synchronizedTogglesMap = Util.Clone(self.realtimeTogglesMap)
 
                 self.sdkState = "healthy"
                 self.etags = nil
@@ -391,17 +398,10 @@ function ToggletClient:IsEnabled(featureName, forceSelectRealtimeToggle)
 
   local togglesMap = self:selectTogglesMap(forceSelectRealtimeToggle)
   local toggle = togglesMap[featureName]
-
-  -- FIXME
-  -- 활성화된 플래그들만 받아와서 가지고 있기 때문에, 플래그가 없다고해서 defaultValue를
-  -- 반환하게되면, false 부정에 불과해진다.
-  -- 이를 확실하게 처리하려면,
   local enabled = (toggle and toggle.enabled) or false
 
   if not self.offline then
-    if self.metricsReporter then
-      self.metricsReporter:Count(featureName, enabled)
-    end
+    self.metricsReporter:Count(featureName, enabled)
 
     local impressionData = self.impressionDataAll or (toggle and toggle.impressionData)
     if impressionData then
@@ -424,16 +424,13 @@ function ToggletClient:GetVariant(featureName, forceSelectRealtimeToggle)
   Validation.RequireName(featureName, "featureName", "ToggletClient:GetVariant")
 
   local togglesMap = self:selectTogglesMap(forceSelectRealtimeToggle)
-
   local toggle = togglesMap[featureName]
   local enabled = (toggle and toggle.enabled) or false
   local variant = (toggle and toggle.variant) or DEFAULT_DISABLED_VARIANT
 
   if not self.offline then
-    if self.metricsReporter then
-      self.metricsReporter:CountVariant(featureName, variant.name)
-      self.metricsReporter:Count(featureName, enabled)
-    end
+    self.metricsReporter:CountVariant(featureName, variant.name)
+    self.metricsReporter:Count(featureName, enabled)
 
     local impressionData = self.impressionDataAll or (toggle and toggle.impressionData)
     if impressionData then
@@ -462,10 +459,6 @@ function ToggletClient:GetToggle(featureName, forceSelectRealtimeToggle)
   return ToggleProxy.GetOrCreate(self, featureName, variant)
 end
 
--- FIXME
--- 서버에서 enabled된 플래그들만 가져오기 때문에, 찾지 못한 플래그일 경우
--- defaultValue를 반환하는 기능을 적용할수 없다.
--- 활성화된 플래그뿐만 아니라 비활성화된 플래그도 가져온다면 해결이 가능할것 같은데??
 function ToggletClient:BoolVariation(featureName, defaultValue, forceSelectRealtimeToggle)
   return self:GetToggle(featureName, forceSelectRealtimeToggle):BoolVariation(defaultValue)
 end
@@ -481,28 +474,6 @@ end
 function ToggletClient:JsonVariation(featureName, defaultValue, forceSelectRealtimeToggle)
   return self:GetToggle(featureName, forceSelectRealtimeToggle):JsonVariation(defaultValue)
 end
-
--- Detail은 이런 형태면 되지 않나?
--- return {
---   value = ...
---   reason = ...
--- }
-
--- function ToggletVersion:BoolVariationDetail(featureName, defaultValue, forceSelectRealtimeToggle)
---   return self:GetToggle(featureName, forceSelectRealtimeToggle):BoolVariationDetail(defaultValue)
--- end
---
--- function ToggletVersion:NumberVariationDetail(featureName, defaultValue, forceSelectRealtimeToggle)
---   return self:GetToggle(featureName, forceSelectRealtimeToggle):NumberVariationDetail(defaultValue)
--- end
---
--- function ToggletVersion:StringVariationDetail(featureName, defaultValue, forceSelectRealtimeToggle)
---   return self:GetToggle(featureName, forceSelectRealtimeToggle):StringVariationDetail(defaultValue)
--- end
---
--- function ToggletVersion:JsonVariationDetail(featureName, defaultValue, forceSelectRealtimeToggle)
---   return self:GetToggle(featureName, forceSelectRealtimeToggle):JsonVariationDetail(defaultValue)
--- end
 
 function ToggletClient:Variation(featureName, defaultVariantName, forceSelectRealtimeToggle)
   local variant = self:GetVariant(featureName, forceSelectRealtimeToggle)
@@ -523,7 +494,7 @@ function ToggletClient:SyncToggles(fetchNow)
   end
 
   if fetchNow then
-    return self:UpdateToggles(true) -- skip calculate context hash
+    return self:UpdateToggles()
         :Next(function()
           self:conditionalSyncTogglesMap()
         end)
@@ -536,7 +507,7 @@ end
 function ToggletClient:conditionalSyncTogglesMap(force)
   if force == true or self.lastSynchronizedETag ~= self.etag then
     self.lastSynchronizedETag = self.etag
-    self.synchronizedTogglesMap = Util.DeepClone(self.realtimeTogglesMap)
+    self.synchronizedTogglesMap = Util.Clone(self.realtimeTogglesMap)
     self:emit(Events.UPDATE, self.synchronizedTogglesMap)
   end
 end
@@ -586,15 +557,14 @@ function ToggletClient:UnwatchToggle(featureName, callback)
   self.eventEmitter:Off(eventName, callback)
 end
 
-function ToggletClient:UpdateToggles(skipCalculateContextHash)
+function ToggletClient:UpdateToggles()
   if self.offline then
     return Promise.Completed()
   end
 
   if self.fetching then
     local promise = Promise.New()
-
-    if skipCalculateContextHash or self.fetchingContextHash ~= Util.CalculateHash(self.context) then
+    if self.fetchingContextVersion ~= self.contextVersion then
       self:Once(Events.FETCH_COMPLETED, function()
         self:UpdateToggles():Next(function()
           promise:Resolve()
@@ -605,11 +575,10 @@ function ToggletClient:UpdateToggles(skipCalculateContextHash)
         promise:Resolve()
       end)
     end
-
     return promise
   end
 
-  if self.started then
+  if self.readyEventEmitted then
     self.logger:Debug("ℹ️ Force refetch now")
 
     self:cancelFetchTimer()
@@ -627,7 +596,7 @@ function ToggletClient:UpdateToggles(skipCalculateContextHash)
 end
 
 function ToggletClient:GetContext()
-  return Util.DeepClone(self.context)
+  return Util.Clone(self.context)
 end
 
 function ToggletClient:updateContextField(field, value)
@@ -639,13 +608,19 @@ function ToggletClient:updateContextField(field, value)
   self.logger:Debug("🧩 Update a context field: field=`%s`, value=`%s`", field, value)
 
   if DEFINED_CONTEXT_FIELDS[field] then
+    if value == self.context[field] then return false end
+
     self.context[field] = value
+    self.contextVersion = self.contextVersion + 1
   else
     if not self.context.properties then
       self.context.properties = {}
+    else
+      if value == self.context.properties[field] then return false end
     end
-    if value == self.context.properties[field] then return false end
+
     self.context.properties[field] = value
+    self.contextVersion = self.contextVersion + 1
   end
 
   return true
@@ -668,8 +643,8 @@ function ToggletClient:SetContextFields(fields)
   end
 
   local changeds = self:updateContextFields(fields);
-  if self.started and changeds then
-    return self:UpdateToggles(true) -- skip calculate context hash
+  if self.readyEventEmitted and changeds then
+    return self:UpdateToggles()
   else
     return Promise.Completed()
   end
@@ -681,8 +656,8 @@ function ToggletClient:SetContextField(field, value)
   end
 
   local changed = self:updateContextField(field, value)
-  if self.started and changed then
-    return self:UpdateToggles(true) -- skip calculate context hash
+  if self.readyEventEmitted and changed then
+    return self:UpdateToggles()
   else
     return Promise.Completed()
   end
@@ -699,16 +674,18 @@ function ToggletClient:RemoveContextField(field)
     end
 
     self.context[field] = nil
+    self.contextVersion = self.contextVersion + 1
   elseif self.context.properties and type(self.context.properties) == "table" then
     if not self.context.properties[field] then
       return Promise.Completed()
     end
 
     table.remove(self.context.properties, field)
+    self.contextVersion = self.contextVersion + 1
   end
 
-  if self.started then
-    return self:UpdateToggles(true) -- skip calculate context hash
+  if self.readyEventEmitted then
+    return self:UpdateToggles()
   else
     return Promise.Completed()
   end
@@ -851,9 +828,7 @@ function ToggletClient:Stop()
     return promise:Resolve()
   end
 
-  if self.metricsReporter then
-    self.metricsReporter:Stop()
-  end
+  self.metricsReporter:Stop()
 
   if self.timer then
     self.timer:CancelAll()
@@ -875,11 +850,7 @@ function ToggletClient:GetError()
 end
 
 function ToggletClient:SendMetrics()
-  if self.metricsReporter then
-    return self.metricsReporter:SendMetrics()
-  else
-    return Promise.Completed()
-  end
+  return self.metricsReporter:SendMetrics()
 end
 
 function ToggletClient:resolveSessionId()
@@ -1037,7 +1008,7 @@ function ToggletClient:initialFetchToggles()
 
   return self:fetchToggles():Next(function()
     if not self.useExplicitSyncMode then
-      self.synchronizedTogglesMap = Util.DeepClone(self.realtimeTogglesMap)
+      self.synchronizedTogglesMap = Util.Clone(self.realtimeTogglesMap)
     end
   end)
 end
@@ -1068,48 +1039,23 @@ function ToggletClient:contextWithAppName()
   return context
 end
 
--- FIXME retry를 구분해서 처리해야함
 function ToggletClient:fetchToggles(retry)
-  local context = self:contextWithAppName()
+  self.fetching = true
+
+  if not retry then
+    self.fetchingContextVersion = self.contextVersion
+    self.fetchingContext = self:contextWithAppName()
+  end
 
   local isPOST = self.usePOSTrequests
-  local url = isPOST and self.url or Util.UrlWithContextAsQuery(self.url, context)
-  local body = nil
+  local url = isPOST and self.url or Util.UrlWithContextAsQuery(self.url, self.fetchingContext)
   local method = isPOST and "POST" or "GET"
+  local headers = self:getHeaders()
 
   -- Safely encode JSON for POST requests
   if isPOST then
-    local success, jsonBody = pcall(Json.encode, { context = context })
-    if not success then
-      local jsonErrorDetail = ErrorHelper.GetJsonEncodingErrorDetail(tostring(jsonBody), "context")
-      local detail = {
-        contextPreview = ErrorHelper.GetTableKeys(context),
-        errorMessage = tostring(jsonBody),
-        prevention = jsonErrorDetail.prevention,
-        solution = jsonErrorDetail.solution,
-        troubleshooting = jsonErrorDetail.troubleshooting
-      }
-
-      local error = self:emitError(
-        ErrorTypes.JSON_ERROR,
-        "Failed to encode request JSON: " .. tostring(jsonBody),
-        "fetchToggles",
-        Logging.LogLevel.Error,
-        detail
-      )
-
-      self.sdkState = "error"
-      self.lastError = error
-
-      return Promise.FromError(error) -- stop fetching
-    end
-    body = jsonBody
-  end
-
-  local headers = self:getHeaders()
-
-  -- Note: When using the POST method, the Content-Length header must be set.
-  if isPOST then
+    body = Json.encode({ context = self.fetchingContext })
+    -- Note: When using the POST method, the Content-Length header must be set.
     headers["Content-Length"] = tostring(body and #body or 0)
   end
 
@@ -1122,10 +1068,11 @@ function ToggletClient:fetchToggles(retry)
   --   end
   -- end
 
-  self.logger:Debug("🔄 Fetching feature flags...")
-
-  self.fetching = true
-  self.fetchingContextHash = Util.CalculateHash(self.context)
+  if retry then
+    self.logger:Debug("🔄 Fetching feature flags for Retry: contextVersion=" .. self.fetchingContextVersion)
+  else
+    self.logger:Debug("🔄 Fetching feature flags: contextVersion=" .. self.fetchingContextVersion)
+  end
 
   local promise = Promise.New()
   self.request(url, method, headers, body, function(response)
@@ -1135,21 +1082,18 @@ function ToggletClient:fetchToggles(retry)
 end
 
 function ToggletClient:handleFetchResponse(url, method, headers, body, response, promise)
-  self.fetching = false
+  if response.status >= 200 and response.status <= 299 or response.status == 304 then
+    self.fetching = false
 
-  -- FIXME
-  -- 성공일때만 지운다. 재시도 상황이면 클리어하면 안됨.
-  -- 이건 좀 자세하게 분석해봐야함.
-  self.fetchingContextHash = nil
+    self:emit(Events.FETCH_COMPLETED)
 
-  self:emit(Events.FETCH_COMPLETED) -- 성공일때만 emit해야하는??
-
-  if self.sdkState == "error" and (response.status >= 200 and response.status < 400) then
-    self.sdkState = "healthy"
-    self:emit(Events.RECOVERED)
+    if self.sdkState == "error" then
+      self.sdkState = "healthy"
+      self:emit(Events.RECOVERED)
+    end
   end
 
-  if response.status >= 200 and response.status < 300 then
+  if response.status >= 200 and response.status <= 299 then
     self.etag = Util.FindCaseInsensitive(response.headers, "ETag") or nil
 
     local data, error = self:parseAndValidateResponse(url, method, response)
@@ -1177,9 +1121,10 @@ function ToggletClient:handleFetchResponse(url, method, headers, body, response,
     local nextFetchDelay = self:handleHttpErrorCases(url, response.status, response.body)
     if nextFetchDelay > 0 then
       self:scheduleNextFetch(nextFetchDelay, true) -- retry
+    else
+      self.fetching = false
+      promise:Reject(error)
     end
-
-    promise:Reject(error)
   end
 end
 
@@ -1444,29 +1389,5 @@ function ToggletClient:emitError(type, message, functionName, logLevel, detail)
 
   return errorData
 end
-
--- function ToggletClient:callWithGuard(callback, ...)
---   if not callback then return end
-
---   local success, result = pcall(callback, ...)
---   if not success then
---     local errorMsg = tostring(result)
---     local detail = {
---       callbackType = type(callback),
---       argCount = select("#", ...),
---       callLocation = debug.getinfo(2, "Sl"),
---       prevention = "Ensure callback functions are properly implemented and handle all edge cases.",
---       solution = "Review callback implementation and add proper error handling within the callback.",
---       troubleshooting = {
---         "1. Check callback function implementation for runtime errors",
---         "2. Verify all parameters passed to callback are valid",
---         "3. Add try-catch blocks within callback if needed",
---         "4. Review callback logic for potential nil access or type errors"
---       }
---     }
---     self:emitError(ErrorTypes.CALLBACK_ERROR, errorMsg, "callWithGuard", Logging.LogLevel.Error, detail)
---   end
---   return success, result
--- end
 
 return ToggletClient

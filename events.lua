@@ -17,11 +17,14 @@
 local Events = {
   INIT = "init",
   ERROR = "error",
+  WARN = "warn",
   READY = "ready",
   UPDATE = "update",
   IMPRESSION = "impression",
   SENT = "sent",
   RECOVERED = "recovered",
+
+  -- internal events
   FETCH_COMPLETED = "fetch_completed",
 }
 

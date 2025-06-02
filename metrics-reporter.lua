@@ -44,7 +44,6 @@ function MetricsReporter.New(config)
   self.logger = config.loggerFactory:CreateLogger("MetricsReporter")
   self.client = config.client
   self.onSent = config.onSent or function() end
-  self.disabled = config.disableMetrics or false
   self.metricsInterval = config.metricsInterval or 30
   self.metricsIntervalInitial = config.metricsIntervalInitial or 10
   self.appName = config.appName
@@ -63,10 +62,6 @@ function MetricsReporter.New(config)
 end
 
 function MetricsReporter:Start()
-  if self.disabled then
-    return false
-  end
-
   if type(self.metricsInterval) == "number" and self.metricsInterval > 0 then
     -- Check for already timer was started.
     if self.timerRunning then
@@ -198,10 +193,6 @@ function MetricsReporter:SendMetrics()
 end
 
 function MetricsReporter:Count(name, enabled)
-  if self.disabled or not self.bucket then
-    return false
-  end
-
   self:ensureBucketExists(name)
 
   local yesOrNo = enabled and "yes" or "no"
@@ -210,10 +201,6 @@ function MetricsReporter:Count(name, enabled)
 end
 
 function MetricsReporter:CountVariant(name, variant)
-  if self.disabled or not self.bucket then
-    return false
-  end
-
   self:ensureBucketExists(name)
 
   self.bucket.toggles[name].variants[variant] = (self.bucket.toggles[name].variants[variant] or 0) + 1
@@ -221,10 +208,6 @@ function MetricsReporter:CountVariant(name, variant)
 end
 
 function MetricsReporter:ensureBucketExists(name)
-  if self.disabled or not self.bucket then
-    return false
-  end
-
   if not self.bucket.toggles[name] then
     self.bucket.toggles[name] = {
       yes = 0,
@@ -232,7 +215,6 @@ function MetricsReporter:ensureBucketExists(name)
       variants = setmetatable({}, { __jsontype = 'object' }), -- Must be recognized as an object, not an array.
     }
   end
-
   return true
 end
 

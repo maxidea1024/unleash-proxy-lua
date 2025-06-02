@@ -16,7 +16,6 @@ function InMemoryStorageProvider:Store(key, data)
   local promise = Promise.New()
 
   if type(key) ~= "string" then
-    -- self.logger:Error("Invalid key type: " .. type(key))
     promise:Reject(string.format("Invalid key type: %s", type(key)))
     return promise
   end
@@ -30,7 +29,6 @@ function InMemoryStorageProvider:Load(key)
   local promise = Promise.New()
 
   if type(key) ~= "string" then
-    -- self.logger:Error("Invalid key type: " .. type(key))
     promise:Reject(string.format("Invalid key type: %s", type(key)))
     return promise
   end

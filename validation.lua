@@ -44,11 +44,11 @@ function Validation.RequireName(value, paramName, functionName)
   end
   
   -- 이름에 허용되지 않는 특수 문자 체크
-  local invalidChars = value:match("[^%w%.%-%_]")
-  if invalidChars then
-    error(string.format("`%s` contains invalid characters in `%s`. Only alphanumeric characters, dots, hyphens, and underscores are allowed.",
-      paramName, functionName))
-  end
+  --local invalidChars = value:match("[^%w%.%-%_]")
+  --if invalidChars then
+  --  error(string.format("`%s` contains invalid characters in `%s`. Only alphanumeric characters, dots, hyphens, and underscores are allowed.",
+  --    paramName, functionName))
+  --end
 
   return value
 end
@@ -203,4 +203,3 @@ function Validation.RequireInstance(value, class, paramName, functionName)
 end
 
 return Validation
-

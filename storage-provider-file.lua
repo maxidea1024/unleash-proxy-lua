@@ -21,14 +21,12 @@ function FileStorageProvider:Store(key, data)
   local filename = self:getStorageFilename(key)
   local success, jsonData = pcall(Json.encode, data)
   if not success or type(jsonData) ~= "string" then
-    -- self.logger:Error("Failed to encode JSON: " .. tostring(jsonData))
     promise:Reject(jsonData)
     return promise
   end
 
   local file, err = io.open(filename, "w")
   if not file then
-    -- self.logger:Error("Failed to open file for writing: " .. tostring(err))
     promise:Reject(err)
     return promise
   end
@@ -38,7 +36,6 @@ function FileStorageProvider:Store(key, data)
     file:close()
   end)
   if not ok then
-    -- self.logger:Error("Failed to write to file: " .. tostring(writeErr))
     promise:Reject(writeErr)
     return promise
   end
@@ -56,7 +53,6 @@ function FileStorageProvider:Load(key)
     if err and err:match("No such file") then
       promise:Resolve(nil) -- No data found
     else
-      -- self.logger:Error("Failed to open file for reading: " .. tostring(err))
       promise:Reject(err)
     end
     return promise
@@ -68,7 +64,6 @@ function FileStorageProvider:Load(key)
     return data
   end)
   if not ok then
-    -- self.logger:Error("Failed to read file: " .. tostring(rawData))
     promise:Reject(rawData)
     return promise
   end
@@ -80,7 +75,6 @@ function FileStorageProvider:Load(key)
 
   local success, data = pcall(Json.decode, rawData)
   if not success then
-    -- self.logger:Error("Failed to decode JSON: " .. tostring(data))
     promise:Reject(data)
     return promise
   end

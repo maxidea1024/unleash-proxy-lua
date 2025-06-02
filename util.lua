@@ -114,7 +114,7 @@ local function IsTable(t)
   return type(t) == "table"
 end
 
-local function DeepClone(...)
+local function Clone(...)
   local result = {}
 
   for i = 1, select("#", ...) do
@@ -122,7 +122,7 @@ local function DeepClone(...)
     if IsTable(t) then
       for k, v in pairs(t) do
         if IsTable(v) and IsTable(result[k]) then
-          result[k] = DeepClone(result[k], v)
+          result[k] = Clone(result[k], v)
         else
           result[k] = v
         end
@@ -337,7 +337,7 @@ end
 return {
   UrlWithContextAsQuery = UrlWithContextAsQuery,
   ComputeContextHashValue = ComputeContextHashValue,
-  DeepClone = DeepClone,
+  Clone = Clone,
   ElementCountOfTable = ElementCountOfTable,
   IsTable = IsTable,
   IsEmptyTable = IsEmptyTable,

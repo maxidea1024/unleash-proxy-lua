@@ -1,0 +1,23 @@
+-- resolve api url and client key.
+local apiTables = {
+  development = {
+    url = "https://us.app.unleash-hosted.com/usii0012/api/frontend/",
+    clientKey = "*:development.70e1e5a9958e464ca6f1c4528763db6d885871c2f736c5cb26cc7f36",
+  },
+  qa = {
+    url = "https://us.app.unleash-hosted.com/usii0012/api/frontend/",
+    clientKey = "*:qa.efbdabeb71c3efc76842621515f5041e3aef39eb2ed0ec14c06a6e2e",
+  },
+  fgt = {
+    url = "https://us.app.unleash-hosted.com/usii0012/api/frontend/",
+    clientKey = "*:fgt.eb3c40470df0a224927089947473e030a3860e8f79b2785e3d43b5cf",
+  },
+  cbt = {
+    url = "https://us.app.unleash-hosted.com/usii0012/api/frontend/",
+    clientKey = "*:cbt.9e8eef79b6ab23abc140a932070a2214831e1900ba7658ff63a7f96f",
+  },
+  production = {
+    url = "https://us.app.unleash-hosted.com/usii0012/api/frontend/",
+    clientKey = "*:production.f8b3a084d9522854334817ffc0f61cb48fe1c0192232fa4eab087cf4",
+  }
+}
