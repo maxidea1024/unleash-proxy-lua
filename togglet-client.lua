@@ -1,6 +1,4 @@
 -- TODO 로깅 정리(단순화, 현재는 지나치게 복잡함)
--- TODO fetchToggles() 시에 재시도 처리 정리(재시도 상황은 하나의 fetch가 여전히 진행중으로 봐야함)
--- FIXME 404일때 재시도를 안하고 바로 에러처리가 된다. 왜일까?
 -- FIXME fetch 중 timeout이 30초로 되어 있어서, 반응이 없을 경우 30초동안 대기하는 상황이 발생한다.
 
 local Json = require("framework.3rdparty.togglet.dkjson")
@@ -362,6 +360,8 @@ function ToggletClient:init()
 end
 
 function ToggletClient:setReady()
+  self.logger:Debug("🎉 ToggletClient is ready")
+
   self.readyEventEmitted = true
   self:emit(Events.READY)
 end
@@ -512,17 +512,59 @@ function ToggletClient:conditionalSyncTogglesMap(force)
   end
 end
 
-function ToggletClient:WatchToggle(featureName, callback)
+function ToggletClient:WatchToggle(featureName, callback, owner)
   if self.offline then return function() end end
 
   Validation.RequireName(featureName, "featureName", "ToggletClient:WatchToggle")
   Validation.RequireFunction(callback, "callback", "ToggletClient:WatchToggle")
 
+  local toggle = self:GetToggle(featureName, true)
+  self.logger:Debug("👀 WatchToggle: feature=`%s`, enabled=%s", featureName, toggle:IsEnabled())
+
   local eventName = "update:" .. featureName
+  
+  -- owner 객체가 제공된 경우 약한 참조로 등록
+  if owner then
+    -- 객체가 테이블인지 확인
+    if type(owner) ~= "table" then
+      self.logger:Warn("Owner must be a table object, using standard event registration instead")
+      return self.eventEmitter:On(eventName, callback)
+    end
+    
+    -- 약한 참조 이벤트 리스너 생성
+    local weakCallback = function(...)
+      if owner then  -- owner가 아직 존재하는지 확인
+        callback(...)
+      end
+    end
+    
+    -- 객체 소멸 시 자동 정리를 위한 메타테이블 설정
+    if not getmetatable(owner) or not getmetatable(owner).__gc then
+      -- 이미 메타테이블이 있는 경우 기존 __gc 함수 보존
+      local mt = getmetatable(owner) or {}
+      local oldGc = mt.__gc
+      
+      mt.__gc = function(instance)
+        -- 이벤트 리스너 제거
+        self:UnwatchToggle(featureName, weakCallback)
+        
+        -- 기존 __gc 함수가 있으면 호출
+        if oldGc then
+          oldGc(instance)
+        end
+      end
+      
+      setmetatable(owner, mt)
+    end
+    
+    return self.eventEmitter:OnWeak(eventName, weakCallback)
+  end
+  
+  -- owner가 없는 경우 기존 방식으로 등록
   return self.eventEmitter:On(eventName, callback)
 end
 
-function ToggletClient:WatchToggleWithInitialState(featureName, callback)
+function ToggletClient:WatchToggleWithInitialState(featureName, callback, owner)
   if self.offline then return function() end end
 
   Validation.RequireName(featureName, "featureName", "ToggletClient:WatchToggleWithInitialState")
@@ -530,28 +572,106 @@ function ToggletClient:WatchToggleWithInitialState(featureName, callback)
 
   local eventName = "update:" .. featureName
 
-  -- Note: Register event handlers first to ensure they work as intended when emitting for initial setup.
-  local off = self.eventEmitter:On(eventName, callback)
-
-  -- If READY event has already been emitted, execute immediately
-  -- If READY event has not been emitted yet, execute after the READY event occurs
-  if self.readyEventEmitted then
-    self.eventEmitter:Emit(eventName, self:GetToggle(featureName, true)) -- select realtime toggle
+  -- owner 객체가 제공된 경우 약한 참조로 등록
+  if owner then
+    -- 객체가 테이블인지 확인
+    if type(owner) ~= "table" then
+      self.logger:Warn("Owner must be a table object, using standard event registration instead")
+      
+      -- 기존 방식으로 등록
+      local off = self.eventEmitter:On(eventName, callback)
+      
+      -- 초기 상태 처리
+      if self.readyEventEmitted then
+        local toggle = self:GetToggle(featureName, true)
+        self.logger:Debug("👀 WatchToggleWithInitialState: feature=`%s`, enabled=%s", featureName, toggle:IsEnabled())
+        self.eventEmitter:Emit(eventName, toggle)
+      else
+        self.logger:Debug("👀 WatchToggleWithInitialState: Waiting for `ready` event. feature=`%s`", featureName)
+        self:Once(Events.READY, function()
+          local toggle = self:GetToggle(featureName, true)
+          self.logger:Debug("👀 WatchToggleWithInitialState(Pended): feature=`%s`, enabled=%s", featureName, toggle:IsEnabled())
+          self.eventEmitter:Emit(eventName, toggle)
+        end)
+      end
+      
+      return off
+    end
+    
+    -- 약한 참조 이벤트 리스너 생성
+    local weakCallback = function(...)
+      if owner then  -- owner가 아직 존재하는지 확인
+        callback(...)
+      end
+    end
+    
+    -- 객체 소멸 시 자동 정리를 위한 메타테이블 설정
+    if not getmetatable(owner) or not getmetatable(owner).__gc then
+      -- 이미 메타테이블이 있는 경우 기존 __gc 함수 보존
+      local mt = getmetatable(owner) or {}
+      local oldGc = mt.__gc
+      
+      mt.__gc = function(instance)
+        -- 이벤트 리스너 제거
+        self:UnwatchToggle(featureName, weakCallback)
+        
+        -- 기존 __gc 함수가 있으면 호출
+        if oldGc then
+          oldGc(instance)
+        end
+      end
+      
+      setmetatable(owner, mt)
+    end
+    
+    -- 약한 참조로 이벤트 등록
+    local off = self.eventEmitter:OnWeak(eventName, weakCallback)
+    
+    -- 초기 상태 처리
+    if self.readyEventEmitted then
+      local toggle = self:GetToggle(featureName, true)
+      self.logger:Debug("👀 WatchToggleWithInitialState: feature=`%s`, enabled=%s", featureName, toggle:IsEnabled())
+      self.eventEmitter:Emit(eventName, toggle)
+    else
+      self.logger:Debug("👀 WatchToggleWithInitialState: Waiting for `ready` event. feature=`%s`", featureName)
+      self:Once(Events.READY, function()
+        if owner then  -- owner가 아직 존재하는지 확인
+          local toggle = self:GetToggle(featureName, true)
+          self.logger:Debug("👀 WatchToggleWithInitialState(Pended): feature=`%s`, enabled=%s", featureName, toggle:IsEnabled())
+          self.eventEmitter:Emit(eventName, toggle)
+        end
+      end)
+    end
+    
+    return off
   else
-    self.logger:Debug("👀 WatchToggleWithInitialState: Waiting for `ready` event. feature=`%s`", featureName)
+    -- owner가 없는 경우 기존 방식으로 등록
+    local off = self.eventEmitter:On(eventName, callback)
 
-    self:Once(Events.READY, function()
-      self.eventEmitter:Emit(eventName, self:GetToggle(featureName, true)) -- select realtime toggle
-    end)
+    -- 초기 상태 처리 (기존 코드)
+    if self.readyEventEmitted then
+      local toggle = self:GetToggle(featureName, true)
+      self.logger:Debug("👀 WatchToggleWithInitialState: feature=`%s`, enabled=%s", featureName, toggle:IsEnabled())
+      self.eventEmitter:Emit(eventName, toggle)
+    else
+      self.logger:Debug("👀 WatchToggleWithInitialState: Waiting for `ready` event. feature=`%s`", featureName)
+      self:Once(Events.READY, function()
+        local toggle = self:GetToggle(featureName, true)
+        self.logger:Debug("👀 WatchToggleWithInitialState(Pended): feature=`%s`, enabled=%s", featureName, toggle:IsEnabled())
+        self.eventEmitter:Emit(eventName, toggle)
+      end)
+    end
+
+    return off
   end
-
-  return off
 end
 
 function ToggletClient:UnwatchToggle(featureName, callback)
   if self.offline then return end
 
   Validation.RequireName(featureName, "featureName", "ToggletClient:UnwatchToggle")
+
+  self.logger:Debug("UnwatchToggle: feature=`%s`")
 
   local eventName = "update:" .. featureName
   self.eventEmitter:Off(eventName, callback)
