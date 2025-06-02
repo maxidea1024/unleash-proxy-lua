@@ -5,13 +5,10 @@ local Promise = require("framework.3rdparty.togglet.promise")
 local FileStorageProvider = {}
 FileStorageProvider.__index = FileStorageProvider
 
-function FileStorageProvider.New(backupPath, prefix, loggerFactory)
-  if not loggerFactory then error("`loggerFactory` is required") end
-
+function FileStorageProvider.New(backupPath, prefix)
   local self = setmetatable({}, FileStorageProvider)
   self.backupPath = backupPath or Util.GetTempDir()
   self.prefix = prefix or ""
-  self.logger = loggerFactory:CreateLogger("FileStorageProvider")
   return self
 end
 

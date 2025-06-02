@@ -3,12 +3,9 @@ local Promise = require("framework.3rdparty.togglet.promise")
 local InMemoryStorageProvider = {}
 InMemoryStorageProvider.__index = InMemoryStorageProvider
 
-function InMemoryStorageProvider.New(loggerFactory)
-  if not loggerFactory then error("`loggerFactory` is required") end
-
+function InMemoryStorageProvider.New()
   local self = setmetatable({}, InMemoryStorageProvider)
   self.store = {}
-  self.logger = loggerFactory:CreateLogger("InMemoryStorageProvider")
   return self
 end
 

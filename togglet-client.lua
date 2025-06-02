@@ -133,7 +133,7 @@ function ToggletClient.New(config)
   })
   self.fetchTimer = nil
 
-  self.storage = config.storageProvider or InMemoryStorageProvider.New(self.loggerFactory)
+  self.storage = config.storageProvider or InMemoryStorageProvider.New()
   self.impressionDataAll = config.impressionDataAll or false
 
   self.url = type(config.url) == "string" and config.url or config.url
