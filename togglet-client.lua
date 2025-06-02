@@ -131,7 +131,6 @@ function ToggletClient.New(config)
     loggerFactory = self.loggerFactory,
     client = self
   })
-  self.timer = Timer.New(self.loggerFactory, self)
   self.fetchTimer = nil
 
   self.storage = config.storageProvider or InMemoryStorageProvider.New(self.loggerFactory)
@@ -171,7 +170,6 @@ function ToggletClient.New(config)
       metricsInterval = config.metricsInterval or 60,
       onError = function(err) self:emit(Events.ERROR, err) end,
       onSent = function(data) self:emit(Events.SENT, data) end,
-      timer = self.timer,
       loggerFactory = self.loggerFactory,
     })
   else
@@ -826,7 +824,7 @@ function ToggletClient:scheduleNextFetch(delay, retry)
       self.logger:Debug("🗓️ Next fetch toggles in %.2fs", delay)
     end
 
-    self.fetchTimer = self.timer:SetTimeout(delay, function()
+    self.fetchTimer = Timer.SetTimeout(delay, function()
       self:fetchToggles(retry)
     end)
   end
@@ -835,7 +833,7 @@ end
 function ToggletClient:cancelFetchTimer()
   if self.fetchTimer then
     -- self.logger:Debug("Cancel fetch timer")
-    self.timer:Cancel(self.fetchTimer)
+    Timer.Cancel(self.fetchTimer)
     self.fetchTimer = nil
   end
 end
@@ -854,9 +852,7 @@ function ToggletClient:Stop()
 
   self.metricsReporter:Stop()
 
-  if self.timer then
-    self.timer:CancelAll()
-  end
+  self:cancelFetchTimer()
 
   self.started = false
 
@@ -1348,18 +1344,6 @@ function ToggletClient:Off(event, callback)
   if self.offline then return end
 
   self.eventEmitter:Off(event, callback)
-end
-
--- FIXME 시스템 전역으로 처리해야함
--- Promise만 따로 처리를 하면 되려나?
-function ToggletClient:Tick()
-  if self.timer then
-    self.timer:Tick()
-  end
-
-  -- 시스템 전역객체이므로, 별도로 처리하는게 맞다.
-  -- 일단은 이 코드베이스외에서는 사용되지 않으므로, 당장은 여기에서 호출하도록 하자.
-  Promise.Update()
 end
 
 function ToggletClient:createError(type, message, functionName, detail)

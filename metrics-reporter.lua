@@ -6,6 +6,7 @@ local Logging = require("framework.3rdparty.togglet.logging")
 local ErrorTypes = require("framework.3rdparty.togglet.error-types")
 local ErrorHelper = require("framework.3rdparty.togglet.error-helper")
 local Validation = require("framework.3rdparty.togglet.validation")
+local Timer = require("framework.3rdparty.togglet.timer")
 
 local MetricsReporter = {}
 MetricsReporter.__index = MetricsReporter
@@ -54,7 +55,6 @@ function MetricsReporter.New(config)
   self.customHeaders = config.customHeaders or {}
   self.connectionId = config.connectionId
   self.bucket = self:createEmptyBucket()
-  self.timer = config.timer
   self.timerRunning = false
   self.backoffs = 0
 
@@ -73,16 +73,16 @@ function MetricsReporter:Start()
 
     -- TODO timeout으로 변경하자.
 
-    self.timer:Async(function()
+    Timer.Async(function()
       -- Initial delay before starting the metrics collection
       if self.metricsIntervalInitial > 0 then
-        self.timer:Sleep(self.metricsIntervalInitial)
+        Timer.Sleep(self.metricsIntervalInitial)
       end
 
       -- Start the metrics collection loop
       while self.timerRunning do
         self:SendMetrics()
-        self.timer:Sleep(self.metricsInterval)
+        Timer.Sleep(self.metricsInterval)
       end
     end)
 
@@ -93,10 +93,7 @@ function MetricsReporter:Start()
 end
 
 function MetricsReporter:Stop()
-  if self.timerRunning then
-    self.timerRunning = false
-    -- self.timer:Tick() -- Update the timer to ensure it stops
-  end
+  self.timerRunning = false
 end
 
 function MetricsReporter:createEmptyBucket()
@@ -118,7 +115,6 @@ function MetricsReporter:getHeaders()
     ["unleash-sdk"] = self.sdkName,
   }
 
-  -- TODO customHeadersFunction
   for name, value in pairs(self.customHeaders) do
     if value then
       headers[name] = value

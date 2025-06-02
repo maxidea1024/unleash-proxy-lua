@@ -5,6 +5,13 @@ local FileStorageProvider = require("framework.3rdparty.togglet.storage-provider
 local Events = require("framework.3rdparty.togglet.events")
 local Logging = require("framework.3rdparty.togglet.logging")
 local Util = require("framework.3rdparty.togglet.util")
+local Timer = require("framework.3rdparty.togglet.timer")
+local Promise = require("framework.3rdparty.togglet.promise")
+
+local function UpdateTogglet()
+  Timer.Update()
+  Promise.Update()
+end
 
 return {
   ToggletClient = ToggletClient,
@@ -14,4 +21,5 @@ return {
   Events = Events,
   Logging = Logging,
   Util = Util,
+  UpdateTogglet = UpdateTogglet,
 }
