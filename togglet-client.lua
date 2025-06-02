@@ -522,7 +522,7 @@ function ToggletClient:WatchToggle(featureName, callback, owner)
   self.logger:Debug("👀 WatchToggle: feature=`%s`, enabled=%s", featureName, toggle:IsEnabled())
 
   local eventName = "update:" .. featureName
-  
+
   -- owner 객체가 제공된 경우 약한 참조로 등록
   if owner then
     -- 객체가 테이블인지 확인
@@ -530,36 +530,36 @@ function ToggletClient:WatchToggle(featureName, callback, owner)
       self.logger:Warn("Owner must be a table object, using standard event registration instead")
       return self.eventEmitter:On(eventName, callback)
     end
-    
+
     -- 약한 참조 이벤트 리스너 생성
     local weakCallback = function(...)
       if owner then  -- owner가 아직 존재하는지 확인
         callback(...)
       end
     end
-    
+
     -- 객체 소멸 시 자동 정리를 위한 메타테이블 설정
     if not getmetatable(owner) or not getmetatable(owner).__gc then
       -- 이미 메타테이블이 있는 경우 기존 __gc 함수 보존
       local mt = getmetatable(owner) or {}
       local oldGc = mt.__gc
-      
+
       mt.__gc = function(instance)
         -- 이벤트 리스너 제거
         self:UnwatchToggle(featureName, weakCallback)
-        
+
         -- 기존 __gc 함수가 있으면 호출
         if oldGc then
           oldGc(instance)
         end
       end
-      
+
       setmetatable(owner, mt)
     end
-    
+
     return self.eventEmitter:OnWeak(eventName, weakCallback)
   end
-  
+
   -- owner가 없는 경우 기존 방식으로 등록
   return self.eventEmitter:On(eventName, callback)
 end
@@ -577,10 +577,10 @@ function ToggletClient:WatchToggleWithInitialState(featureName, callback, owner)
     -- 객체가 테이블인지 확인
     if type(owner) ~= "table" then
       self.logger:Warn("Owner must be a table object, using standard event registration instead")
-      
+
       -- 기존 방식으로 등록
       local off = self.eventEmitter:On(eventName, callback)
-      
+
       -- 초기 상태 처리
       if self.readyEventEmitted then
         local toggle = self:GetToggle(featureName, true)
@@ -588,45 +588,46 @@ function ToggletClient:WatchToggleWithInitialState(featureName, callback, owner)
         self.eventEmitter:Emit(eventName, toggle)
       else
         self.logger:Debug("👀 WatchToggleWithInitialState: Waiting for `ready` event. feature=`%s`", featureName)
+
         self:Once(Events.READY, function()
           local toggle = self:GetToggle(featureName, true)
           self.logger:Debug("👀 WatchToggleWithInitialState(Pended): feature=`%s`, enabled=%s", featureName, toggle:IsEnabled())
           self.eventEmitter:Emit(eventName, toggle)
         end)
       end
-      
+
       return off
     end
-    
+
     -- 약한 참조 이벤트 리스너 생성
     local weakCallback = function(...)
       if owner then  -- owner가 아직 존재하는지 확인
         callback(...)
       end
     end
-    
+
     -- 객체 소멸 시 자동 정리를 위한 메타테이블 설정
     if not getmetatable(owner) or not getmetatable(owner).__gc then
       -- 이미 메타테이블이 있는 경우 기존 __gc 함수 보존
       local mt = getmetatable(owner) or {}
       local oldGc = mt.__gc
-      
+
       mt.__gc = function(instance)
         -- 이벤트 리스너 제거
         self:UnwatchToggle(featureName, weakCallback)
-        
+
         -- 기존 __gc 함수가 있으면 호출
         if oldGc then
           oldGc(instance)
         end
       end
-      
+
       setmetatable(owner, mt)
     end
-    
+
     -- 약한 참조로 이벤트 등록
     local off = self.eventEmitter:OnWeak(eventName, weakCallback)
-    
+
     -- 초기 상태 처리
     if self.readyEventEmitted then
       local toggle = self:GetToggle(featureName, true)
@@ -634,6 +635,7 @@ function ToggletClient:WatchToggleWithInitialState(featureName, callback, owner)
       self.eventEmitter:Emit(eventName, toggle)
     else
       self.logger:Debug("👀 WatchToggleWithInitialState: Waiting for `ready` event. feature=`%s`", featureName)
+
       self:Once(Events.READY, function()
         if owner then  -- owner가 아직 존재하는지 확인
           local toggle = self:GetToggle(featureName, true)
@@ -642,7 +644,7 @@ function ToggletClient:WatchToggleWithInitialState(featureName, callback, owner)
         end
       end)
     end
-    
+
     return off
   else
     -- owner가 없는 경우 기존 방식으로 등록
@@ -655,6 +657,7 @@ function ToggletClient:WatchToggleWithInitialState(featureName, callback, owner)
       self.eventEmitter:Emit(eventName, toggle)
     else
       self.logger:Debug("👀 WatchToggleWithInitialState: Waiting for `ready` event. feature=`%s`", featureName)
+
       self:Once(Events.READY, function()
         local toggle = self:GetToggle(featureName, true)
         self.logger:Debug("👀 WatchToggleWithInitialState(Pended): feature=`%s`, enabled=%s", featureName, toggle:IsEnabled())
@@ -911,7 +914,6 @@ function ToggletClient:countSuccess()
   return self:getNextFetchDelay()
 end
 
--- FIXME retry 상황일때 처리만 신경써주면 문제없을듯 하다!!
 function ToggletClient:scheduleNextFetch(delay, retry)
   if delay > 0 then
     self:cancelFetchTimer()
