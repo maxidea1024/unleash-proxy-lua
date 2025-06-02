@@ -8,11 +8,6 @@ local Util = require("framework.3rdparty.togglet.util")
 local Timer = require("framework.3rdparty.togglet.timer")
 local Promise = require("framework.3rdparty.togglet.promise")
 
-local function UpdateTogglet()
-  Timer.Update()
-  Promise.Update()
-end
-
 return {
   ToggletClient = ToggletClient,
   ToggletClientBuilder = ToggletClientBuilder,
@@ -21,5 +16,8 @@ return {
   Events = Events,
   Logging = Logging,
   Util = Util,
-  UpdateTogglet = UpdateTogglet,
+  UpdateTogglet = function()
+    Timer.Update()
+    Promise.Update()
+  end,
 }

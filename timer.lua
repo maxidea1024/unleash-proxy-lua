@@ -2,7 +2,7 @@ local timers = {}
 local nextTimerId = 1
 local co_pool = setmetatable({}, { __mode = "kv" })
 
-function insertTimer(sec, fn)
+local function insertTimer(sec, fn)
   local now = os.clock()
   local expireAt = now + sec
   local pos = 1
@@ -13,7 +13,11 @@ function insertTimer(sec, fn)
     pos = i + 1
   end
 
-  local context = { id = nextTimerId, expireAt = expireAt, fn = fn }
+  local context = {
+    id = nextTimerId,
+    expireAt = expireAt,
+    fn = fn
+  }
   nextTimerId = nextTimerId + 1
 
   table.insert(timers, pos, context)
@@ -28,7 +32,7 @@ local function coresume(co, ...)
   return ok, err
 end
 
-function routine(fn)
+local function routine(fn)
   local co = coroutine.running()
   while true do
     fn()
@@ -61,7 +65,7 @@ function Timer.SetTimeout(seconds, fn)
   return insertTimer(seconds, fn)
 end
 
-function Timer:SetInterval(seconds, fn)
+function Timer.SetInterval(seconds, fn)
   local context
   local function intervalFn()
     if not context or context.canceled then return end
@@ -100,7 +104,7 @@ function Timer.TimerCount()
   return #timers
 end
 
-function Timer.Tick()
+function Timer.Update()
   local now = os.clock()
   while #timers > 0 do
     local timer = timers[1]
