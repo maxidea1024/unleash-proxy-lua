@@ -520,7 +520,7 @@ function ToggletClient:WatchToggle(featureName, callback)
   self.eventEmitter:On(eventName, callback)
 
   return function()
-    self.UnwatchToggle(featureName, callback)
+    self:UnwatchToggle(featureName, callback)
   end
 end
 
@@ -568,13 +568,14 @@ function ToggleClient:CreateWatchToggleGroup()
   return WatchToggleGroup.New(self)
 end
 
--- local watchToggleGroup = toggletClient:CreateWatchToggleGroup()
+-- local watchToggleGroup = client:CreateWatchToggleGroup()
 --
--- watchToggleGroup:WatchToggle("...", function(toggle) end)
--- watchToggleGroup:WatchToggle("...", function(toggle) end)
--- watchToggleGroup:WatchToggle("...", function(toggle) end)
--- watchToggleGroup:WatchToggle("...", function(toggle) end)
--- watchToggleGroup:WatchToggle("...", function(toggle) end)
+-- watchToggleGroup
+--   :WatchToggle("flag-1", function(toggle) end)
+--   :WatchToggle("flag-2", function(toggle) end)
+--   :WatchToggle("flag-3", function(toggle) end)
+--   :WatchToggle("flag-4", function(toggle) end)
+--   :WatchToggle("flag-5", function(toggle) end)
 --
 -- watchToggleGroup:UnwatchAll()
 
@@ -622,6 +623,8 @@ function ToggletClient:GetContext()
 end
 
 function ToggletClient:updateContextField(field, value)
+  Validation.RequireName(field, "field", "ToggletClient:updateContextField")
+
   if STATIC_CONTEXT_FIELDS[field] then
     self.logger:Warn("🧩 `%s` is a static field. It can't be updated with ToggletClient:updateContextField.", field)
     return false

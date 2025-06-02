@@ -1,7 +1,3 @@
-------------------------------------------------------------------
--- WatchToggleGroup implementation
-------------------------------------------------------------------
-
 local WatchToggleGroup = {}
 WatchToggleGroup.__index = WatchToggleGroup
 
@@ -14,10 +10,12 @@ end
 
 function WatchToggleGroup:WatchToggle(featureName, callback)
   self.client:WatchToggle(featureName, callback)
+  return self
 end
 
 function WatchToggleGroup:WatchToggleWithInitialState(featureName, callback)
   self.client:WatchToggleWithInitialState(featureName, callback)
+  return self
 end
 
 function WatchToggleGroup:UnwatchAll()
