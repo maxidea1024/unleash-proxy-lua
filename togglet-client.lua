@@ -507,7 +507,7 @@ function ToggletClient:conditionalSyncTogglesMap(force)
   end
 end
 
-function ToggletClient:WatchToggle(featureName, callback, owner)
+function ToggletClient:WatchToggle(featureName, callback)
   if self.offline then return function() end end
 
   Validation.RequireName(featureName, "featureName", "ToggletClient:WatchToggle")
@@ -517,7 +517,11 @@ function ToggletClient:WatchToggle(featureName, callback, owner)
   self.logger:Debug("👀 WatchToggle: feature=`%s`, enabled=%s", featureName, toggle:IsEnabled())
 
   local eventName = "update:" .. featureName
-  return self.eventEmitter:On(eventName, callback)
+  self.eventEmitter:On(eventName, callback)
+
+  return function()
+    self.UnwatchToggle(featureName, callback)
+  end
 end
 
 function ToggletClient:WatchToggleWithInitialState(featureName, callback)
@@ -527,15 +531,14 @@ function ToggletClient:WatchToggleWithInitialState(featureName, callback)
   Validation.RequireFunction(callback, "callback", "ToggletClient:WatchToggleWithInitialState")
 
   local eventName = "update:" .. featureName
-
-  local off = self.eventEmitter:On(eventName, callback)
+  self.eventEmitter:On(eventName, callback)
 
   if self.readyEventEmitted then
     local toggle = self:GetToggle(featureName, true)
     self.logger:Debug("👀 WatchToggleWithInitialState: feature=`%s`, enabled=%s", featureName, toggle:IsEnabled())
     self.eventEmitter:Emit(eventName, toggle)
   else
-    self.logger:Debug("👀 WatchToggleWithInitialState: Waiting for `ready` event. feature=`%s` enabled=?", featureName)
+    self.logger:Debug("👀 WatchToggleWithInitialState: Waiting for `ready` event. feature=`%s` enabled=???", featureName)
 
     self:Once(Events.READY, function()
       local toggle = self:GetToggle(featureName, true)
@@ -544,7 +547,9 @@ function ToggletClient:WatchToggleWithInitialState(featureName, callback)
     end)
   end
 
-  return off
+  return function()
+    self:UnwatchToggle(featureName, callback)
+  end
 end
 
 function ToggletClient:UnwatchToggle(featureName, callback)
@@ -1023,9 +1028,7 @@ function ToggletClient:initialFetchToggles()
   end
 
   return self:fetchToggles():Next(function()
-    if not self.useExplicitSyncMode then
-      self.synchronizedTogglesMap = Util.Clone(self.realtimeTogglesMap)
-    end
+    self.synchronizedTogglesMap = Util.Clone(self.realtimeTogglesMap)
   end)
 end
 
