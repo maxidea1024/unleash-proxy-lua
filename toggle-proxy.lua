@@ -163,6 +163,10 @@ function M:JsonVariation(defaultValue)
   return result
 end
 
+function M:Variant(defaultVariantName)
+  return self.variant and self.variant.feature_enabled and self.variant.enabled and self.variant.name or defaultVariantName
+end
+
 -- TODO 이름이 모호해서 일단은 기능을 막아둠.
 -- function M:Variation(defaultValue)
 --   if not self.variant or not self.variant.payload then

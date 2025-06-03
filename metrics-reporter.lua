@@ -14,33 +14,33 @@ M.__index = M
 M.__name = "MetricsReporter"
 
 function M.New(config)
-  Validation.RequireTable(config, "config", "M.New")
-  Validation.RequireField(config, "client", "config", "M.New")
-  Validation.RequireField(config, "appName", "config", "M.New")
-  Validation.RequireField(config, "connectionId", "config", "M.New")
-  Validation.RequireField(config, "url", "config", "M.New")
-  Validation.RequireField(config, "clientKey", "config", "M.New")
-  Validation.RequireField(config, "request", "config", "M.New")
-  Validation.RequireField(config, "loggerFactory", "config", "M.New")
+  Validation.RequireTable(config, "config", "MetricsReporter.New")
+  Validation.RequireField(config, "client", "config", "MetricsReporter.New")
+  Validation.RequireField(config, "appName", "config", "MetricsReporter.New")
+  Validation.RequireField(config, "connectionId", "config", "MetricsReporter.New")
+  Validation.RequireField(config, "url", "config", "MetricsReporter.New")
+  Validation.RequireField(config, "clientKey", "config", "MetricsReporter.New")
+  Validation.RequireField(config, "request", "config", "MetricsReporter.New")
+  Validation.RequireField(config, "loggerFactory", "config", "MetricsReporter.New")
 
   if config.metricsInterval ~= nil then
-    Validation.RequireNumber(config.metricsInterval, "config.metricsInterval", "M.New", 0)
+    Validation.RequireNumber(config.metricsInterval, "config.metricsInterval", "MetricsReporter.New", 0)
   end
 
   if config.metricsIntervalInitial ~= nil then
-    Validation.RequireNumber(config.metricsIntervalInitial, "config.metricsIntervalInitial", "M.New", 0)
+    Validation.RequireNumber(config.metricsIntervalInitial, "config.metricsIntervalInitial", "MetricsReporter.New", 0)
   end
 
   if config.disableMetrics ~= nil then
-    Validation.RequireBoolean(config.disableMetrics, "config.disableMetrics", "M.New")
+    Validation.RequireBoolean(config.disableMetrics, "config.disableMetrics", "MetricsReporter.New")
   end
 
   if config.customHeaders ~= nil then
-    Validation.RequireTable(config.customHeaders, "config.customHeaders", "M.New")
+    Validation.RequireTable(config.customHeaders, "config.customHeaders", "MetricsReporter.New")
   end
 
   if config.onSent ~= nil then
-    Validation.RequireFunction(config.onSent, "config.onSent", "M.New")
+    Validation.RequireFunction(config.onSent, "config.onSent", "MetricsReporter.New")
   end
 
   local self = setmetatable({}, M)
@@ -103,7 +103,7 @@ function M:createEmptyBucket()
   return {
     start = Util.Iso8601UtcNowWithMSec(),
     stop = nil,
-    toggles = {},
+    toggles = setmetatable({}, { __jsontype = 'object' }), -- Must be recognized as an object, not an array.
   }
 end
 

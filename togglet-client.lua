@@ -179,7 +179,7 @@ function M.New(config)
 
   self:registerEventHandlers(config)
 
-  self:summayConfiguration()
+  self:summarizeConfiguration()
 
   if not config.disableAutoStart then
     self:Start()
@@ -216,7 +216,7 @@ function M:registerEventHandlers(config)
   end
 end
 
-function M:summayConfiguration()
+function M:summarizeConfiguration()
   if self.devMode then
     local summary = {
       appName = self.appName,
@@ -472,8 +472,7 @@ function M:JsonVariation(featureName, defaultValue, forceSelectRealtimeToggle)
 end
 
 function M:Variation(featureName, defaultVariantName, forceSelectRealtimeToggle)
-  local variant = self:GetVariant(featureName, forceSelectRealtimeToggle)
-  return variant and variant.feature_enabled and variant.enabled and variant.name or defaultVariantName
+  return self:GetVariant(featureName, forceSelectRealtimeToggle):Varation(defaultVariantName)
 end
 
 function M:selectTogglesMap(forceSelectRealtimeToggle)
