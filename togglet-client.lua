@@ -254,7 +254,8 @@ function M:Start()
 
   self.started = true
 
-  return self:init()
+  -- Load local cache -> Initial fetch toggles
+  return self:loadBackup()
       :Next(function()
         return self:initialFetchToggles()
             :Next(function()
@@ -288,8 +289,8 @@ function M:Start()
       end)
 end
 
-function M:init()
-  self.logger:Debug("🔄 Initializing ToggletClient...")
+function M:loadBackup()
+  self.logger:Debug("🔄 Try loading local cache...")
 
   return self:resolveSessionId()
       :Next(function(sessionId)
@@ -338,17 +339,17 @@ function M:init()
                 --   when the initial fetchToggles() completes.
                 self:setReady()
 
-                self.logger:Debug("✅ Init process completed with bootstrap")
+                self.logger:Debug("✅ Loading local cache completed with bootstrap")
               end)
         else
           self.sdkState = "healthy"
           self:emit(Events.INIT)
 
-          self.logger:Debug("✅ Init process completed without bootstrap")
+          self.logger:Debug("✅ Loading local cache completed without bootstrap")
         end
       end)
       :Catch(function(err)
-        self.logger:Error("❌ Init process failed: %s", tostring(err))
+        self.logger:Error("❌ Loading local cache failed: %s", tostring(err))
         return Promise.FromError(err)
       end)
 end
@@ -360,6 +361,7 @@ function M:setReady()
   self:emit(Events.READY)
 end
 
+-- timeout처리를 해야할까?
 function M:WaitUntilReady()
   if self.offline or self.readyEventEmitted then
     return Promise.Completed()
@@ -512,7 +514,7 @@ function M:WatchToggle(featureName, callback)
   Validation.RequireName(featureName, "featureName", "ToggletClient:WatchToggle")
   Validation.RequireFunction(callback, "callback", "ToggletClient:WatchToggle")
 
-  local toggle = self:GetToggle(featureName, true)
+  local toggle = self:GetToggle(featureName, true) -- realtime
   self.logger:Debug("👀 WatchToggle: feature=`%s`, enabled=%s", featureName, toggle:IsEnabled())
 
   local eventName = "update:" .. featureName
@@ -533,14 +535,14 @@ function M:WatchToggleWithInitialState(featureName, callback)
   self.eventEmitter:On(eventName, callback)
 
   if self.readyEventEmitted then
-    local toggle = self:GetToggle(featureName, true)
+    local toggle = self:GetToggle(featureName, true) -- realtime
     self.logger:Debug("👀 WatchToggleWithInitialState: feature=`%s`, enabled=%s", featureName, toggle:IsEnabled())
     self.eventEmitter:Emit(eventName, toggle)
   else
     self.logger:Debug("👀 WatchToggleWithInitialState: Waiting for `ready` event. feature=`%s` enabled=???", featureName)
 
     self:Once(Events.READY, function()
-      local toggle = self:GetToggle(featureName, true)
+      local toggle = self:GetToggle(featureName, true) -- realtime
       self.logger:Debug("👀 WatchToggleWithInitialState(Pended): feature=`%s`, enabled=%s", featureName, toggle:IsEnabled())
       self.eventEmitter:Emit(eventName, toggle)
     end)
@@ -828,6 +830,8 @@ function M:scheduleNextFetch(delay, retry)
     self.fetchTimer = Timer.SetTimeout(delay, function()
       self:fetchToggles(retry)
     end)
+  else
+    -- 더 이상의 동작을 하지 않음.
   end
 end
 
@@ -942,7 +946,7 @@ function M:storeToggles(toggleArray)
 
       local eventName = "update:" .. oldToggle.name
       if self.eventEmitter:HasListeners(eventName) then
-        self.eventEmitter:Emit(eventName, self:GetToggle(oldToggle.name, true)) -- select realtime toggle
+        self.eventEmitter:Emit(eventName, self:GetToggle(oldToggle.name, true)) -- reamtime
       end
     end
   end
@@ -963,7 +967,7 @@ function M:storeToggles(toggleArray)
     if emitEvent then
       local eventName = "update:" .. newToggle.name
       if self.eventEmitter:HasListeners(eventName) then
-        self.eventEmitter:Emit(eventName, self:GetToggle(newToggle.name, true)) -- select realtime toggle
+        self.eventEmitter:Emit(eventName, self:GetToggle(newToggle.name, true)) -- realtime
       end
     end
   end
@@ -1032,6 +1036,7 @@ function M:initialFetchToggles()
   end)
 end
 
+-- 이 함수는 제거하도록하자.
 function M:contextWithAppName()
   local context = {
     -- static context fields
@@ -1061,7 +1066,11 @@ end
 function M:fetchToggles(retry)
   self.fetching = true
 
-  if not retry then
+  if retry then
+    self.logger:Debug("🔄 Fetching feature flags for Retry: contextVersion=" .. self.fetchingContextVersion)
+  else
+    self.logger:Debug("🔄 Fetching feature flags: contextVersion=" .. self.fetchingContextVersion)
+
     self.fetchingContextVersion = self.contextVersion
     self.fetchingContext = self:contextWithAppName()
   end
@@ -1086,12 +1095,6 @@ function M:fetchToggles(retry)
   --     self.logger:Debug("🔄 Fetching feature flags: %s [JSON encoding failed]", tostring(url))
   --   end
   -- end
-
-  if retry then
-    self.logger:Debug("🔄 Fetching feature flags for Retry: contextVersion=" .. self.fetchingContextVersion)
-  else
-    self.logger:Debug("🔄 Fetching feature flags: contextVersion=" .. self.fetchingContextVersion)
-  end
 
   local promise = Promise.New()
   self.request(url, method, headers, body, function(response)
