@@ -79,13 +79,14 @@ end
 -- ToggletClient implementation
 ------------------------------------------------------------------
 
-local ToggletClient = {}
-ToggletClient.__index = ToggletClient
+local M = {}
+M.__index = M
+M.__name = "ToggletClient"
 
-function ToggletClient.New(config)
+function M.New(config)
   Validation.RequireTable(config, "config", "ToggletClient.New")
 
-  local self = setmetatable({}, ToggletClient)
+  local self = setmetatable({}, M)
 
   self.loggerFactory = config.loggerFactory or Logging.DefaultLoggerFactory.New(Logging.LogLevel.Log)
   self.logger = self.loggerFactory:CreateLogger("Togglet")
@@ -187,7 +188,7 @@ function ToggletClient.New(config)
   return self
 end
 
-function ToggletClient:registerEventHandlers(config)
+function M:registerEventHandlers(config)
   if config.onErrorCallbacks then
     for _, callback in ipairs(config.onErrorCallbacks) do
       self:On(Events.ERROR, callback)
@@ -215,7 +216,7 @@ function ToggletClient:registerEventHandlers(config)
   end
 end
 
-function ToggletClient:summayConfiguration()
+function M:summayConfiguration()
   if self.devMode then
     local summary = {
       appName = self.appName,
@@ -239,7 +240,7 @@ function ToggletClient:summayConfiguration()
   end
 end
 
-function ToggletClient:Start()
+function M:Start()
   if self.offline then
     return Promise.Completed()
   end
@@ -287,7 +288,7 @@ function ToggletClient:Start()
       end)
 end
 
-function ToggletClient:init()
+function M:init()
   self.logger:Debug("🔄 Initializing ToggletClient...")
 
   return self:resolveSessionId()
@@ -352,14 +353,14 @@ function ToggletClient:init()
       end)
 end
 
-function ToggletClient:setReady()
+function M:setReady()
   self.logger:Debug("🎉 ToggletClient is ready")
 
   self.readyEventEmitted = true
   self:emit(Events.READY)
 end
 
-function ToggletClient:WaitUntilReady()
+function M:WaitUntilReady()
   if self.offline or self.readyEventEmitted then
     return Promise.Completed()
   end
@@ -371,7 +372,7 @@ function ToggletClient:WaitUntilReady()
   return promise
 end
 
-function ToggletClient:GetAllToggles(forceSelectRealtimeToggle)
+function M:GetAllToggles(forceSelectRealtimeToggle)
   local togglesMap = self:selectTogglesMap(forceSelectRealtimeToggle)
 
   local result = {}
@@ -386,7 +387,7 @@ function ToggletClient:GetAllToggles(forceSelectRealtimeToggle)
   return result
 end
 
-function ToggletClient:IsEnabled(featureName, forceSelectRealtimeToggle)
+function M:IsEnabled(featureName, forceSelectRealtimeToggle)
   Validation.RequireName(featureName, "featureName", "ToggletClient:IsEnabled")
 
   local togglesMap = self:selectTogglesMap(forceSelectRealtimeToggle)
@@ -413,7 +414,7 @@ function ToggletClient:IsEnabled(featureName, forceSelectRealtimeToggle)
   return enabled
 end
 
-function ToggletClient:GetVariant(featureName, forceSelectRealtimeToggle)
+function M:GetVariant(featureName, forceSelectRealtimeToggle)
   Validation.RequireName(featureName, "featureName", "ToggletClient:GetVariant")
 
   local togglesMap = self:selectTogglesMap(forceSelectRealtimeToggle)
@@ -447,33 +448,33 @@ function ToggletClient:GetVariant(featureName, forceSelectRealtimeToggle)
   }
 end
 
-function ToggletClient:GetToggle(featureName, forceSelectRealtimeToggle)
+function M:GetToggle(featureName, forceSelectRealtimeToggle)
   local variant = self:GetVariant(featureName, forceSelectRealtimeToggle)
   return ToggleProxy.GetOrCreate(self, featureName, variant)
 end
 
-function ToggletClient:BoolVariation(featureName, defaultValue, forceSelectRealtimeToggle)
+function M:BoolVariation(featureName, defaultValue, forceSelectRealtimeToggle)
   return self:GetToggle(featureName, forceSelectRealtimeToggle):BoolVariation(defaultValue)
 end
 
-function ToggletClient:NumberVariation(featureName, defaultValue, min, max, forceSelectRealtimeToggle)
+function M:NumberVariation(featureName, defaultValue, min, max, forceSelectRealtimeToggle)
   return self:GetToggle(featureName, forceSelectRealtimeToggle):NumberVariation(defaultValue, min, max)
 end
 
-function ToggletClient:StringVariation(featureName, defaultValue, forceSelectRealtimeToggle)
+function M:StringVariation(featureName, defaultValue, forceSelectRealtimeToggle)
   return self:GetToggle(featureName, forceSelectRealtimeToggle):StringVariation(defaultValue)
 end
 
-function ToggletClient:JsonVariation(featureName, defaultValue, forceSelectRealtimeToggle)
+function M:JsonVariation(featureName, defaultValue, forceSelectRealtimeToggle)
   return self:GetToggle(featureName, forceSelectRealtimeToggle):JsonVariation(defaultValue)
 end
 
-function ToggletClient:Variation(featureName, defaultVariantName, forceSelectRealtimeToggle)
+function M:Variation(featureName, defaultVariantName, forceSelectRealtimeToggle)
   local variant = self:GetVariant(featureName, forceSelectRealtimeToggle)
   return variant and variant.feature_enabled and variant.enabled and variant.name or defaultVariantName
 end
 
-function ToggletClient:selectTogglesMap(forceSelectRealtimeToggle)
+function M:selectTogglesMap(forceSelectRealtimeToggle)
   if forceSelectRealtimeToggle == true then
     return self.realtimeTogglesMap
   end
@@ -481,7 +482,7 @@ function ToggletClient:selectTogglesMap(forceSelectRealtimeToggle)
   return self.useExplicitSyncMode and self.synchronizedTogglesMap or self.realtimeTogglesMap
 end
 
-function ToggletClient:SyncToggles(fetchNow)
+function M:SyncToggles(fetchNow)
   if self.offline or not self.useExplicitSyncMode then
     return Promise.Completed()
   end
@@ -497,7 +498,7 @@ function ToggletClient:SyncToggles(fetchNow)
   end
 end
 
-function ToggletClient:conditionalSyncTogglesMap(force)
+function M:conditionalSyncTogglesMap(force)
   if force == true or self.lastSynchronizedETag ~= self.etag then
     self.lastSynchronizedETag = self.etag
     self.synchronizedTogglesMap = Util.Clone(self.realtimeTogglesMap)
@@ -505,7 +506,7 @@ function ToggletClient:conditionalSyncTogglesMap(force)
   end
 end
 
-function ToggletClient:WatchToggle(featureName, callback)
+function M:WatchToggle(featureName, callback)
   if self.offline then return function() end end
 
   Validation.RequireName(featureName, "featureName", "ToggletClient:WatchToggle")
@@ -522,7 +523,7 @@ function ToggletClient:WatchToggle(featureName, callback)
   end
 end
 
-function ToggletClient:WatchToggleWithInitialState(featureName, callback)
+function M:WatchToggleWithInitialState(featureName, callback)
   if self.offline then return function() end end
 
   Validation.RequireName(featureName, "featureName", "ToggletClient:WatchToggleWithInitialState")
@@ -550,7 +551,7 @@ function ToggletClient:WatchToggleWithInitialState(featureName, callback)
   end
 end
 
-function ToggletClient:UnwatchToggle(featureName, callback)
+function M:UnwatchToggle(featureName, callback)
   if self.offline then return end
 
   Validation.RequireName(featureName, "featureName", "ToggletClient:UnwatchToggle")
@@ -577,7 +578,7 @@ end
 --
 -- watchToggleGroup:UnwatchAll()
 
-function ToggletClient:UpdateToggles()
+function M:UpdateToggles()
   if self.offline then
     return Promise.Completed()
   end
@@ -616,15 +617,15 @@ function ToggletClient:UpdateToggles()
   end
 end
 
-function ToggletClient:GetContext()
+function M:GetContext()
   return Util.Clone(self.context)
 end
 
-function ToggletClient:updateContextField(field, value)
+function M:updateContextField(field, value)
   Validation.RequireName(field, "field", "ToggletClient:updateContextField")
 
   if STATIC_CONTEXT_FIELDS[field] then
-    self.logger:Warn("🧩 `%s` is a static field. It can't be updated with ToggletClient:updateContextField.", field)
+    self.logger:Warn("🧩 `%s` is a static field. It can't be updated with M:updateContextField.", field)
     return false
   end
 
@@ -649,7 +650,7 @@ function ToggletClient:updateContextField(field, value)
   return true
 end
 
-function ToggletClient:updateContextFields(fields)
+function M:updateContextFields(fields)
   local changeds = 0
   for field, value in pairs(fields) do
     if self:updateContextField(field, value) then
@@ -660,7 +661,7 @@ function ToggletClient:updateContextFields(fields)
   return changeds > 0
 end
 
-function ToggletClient:SetContextFields(fields)
+function M:SetContextFields(fields)
   if self.offline then
     return Promise.Completed()
   end
@@ -673,7 +674,7 @@ function ToggletClient:SetContextFields(fields)
   end
 end
 
-function ToggletClient:SetContextField(field, value)
+function M:SetContextField(field, value)
   if self.offline then
     return Promise.Completed()
   end
@@ -686,7 +687,7 @@ function ToggletClient:SetContextField(field, value)
   end
 end
 
-function ToggletClient:RemoveContextField(field)
+function M:RemoveContextField(field)
   if self.offline then
     return Promise.Completed()
   end
@@ -714,7 +715,7 @@ function ToggletClient:RemoveContextField(field)
   end
 end
 
-function ToggletClient:handleHttpErrorCases(url, statusCode, responseBody)
+function M:handleHttpErrorCases(url, statusCode, responseBody)
   local nextFetchDelay = self:backoff()
 
   local errorType = ErrorTypes.UNKNOWN_ERROR
@@ -784,7 +785,7 @@ function ToggletClient:handleHttpErrorCases(url, statusCode, responseBody)
   return nextFetchDelay
 end
 
-function ToggletClient:getNextFetchDelay()
+function M:getNextFetchDelay()
   local delay = self.refreshInterval
 
   if self.fetchFailures > 0 then
@@ -804,17 +805,17 @@ function ToggletClient:getNextFetchDelay()
   return delay
 end
 
-function ToggletClient:backoff()
+function M:backoff()
   self.fetchFailures = math.min(self.fetchFailures + 1, 10)
   return self:getNextFetchDelay()
 end
 
-function ToggletClient:countSuccess()
+function M:countSuccess()
   self.fetchFailures = math.max(self.fetchFailures - 1, 0)
   return self:getNextFetchDelay()
 end
 
-function ToggletClient:scheduleNextFetch(delay, retry)
+function M:scheduleNextFetch(delay, retry)
   if delay > 0 then
     self:cancelFetchTimer()
 
@@ -830,7 +831,7 @@ function ToggletClient:scheduleNextFetch(delay, retry)
   end
 end
 
-function ToggletClient:cancelFetchTimer()
+function M:cancelFetchTimer()
   if self.fetchTimer then
     -- self.logger:Debug("Cancel fetch timer")
     Timer.Cancel(self.fetchTimer)
@@ -838,7 +839,7 @@ function ToggletClient:cancelFetchTimer()
   end
 end
 
-function ToggletClient:Stop()
+function M:Stop()
   local promise = Promise.New()
 
   if self.offline then
@@ -861,19 +862,19 @@ function ToggletClient:Stop()
   return promise:Resolve()
 end
 
-function ToggletClient:IsReady()
+function M:IsReady()
   return self.offline or self.readyEventEmitted
 end
 
-function ToggletClient:GetError()
+function M:GetError()
   return (self.sdkState == 'error' and self.lastError) or nil
 end
 
-function ToggletClient:SendMetrics()
+function M:SendMetrics()
   return self.metricsReporter:SendMetrics()
 end
 
-function ToggletClient:resolveSessionId()
+function M:resolveSessionId()
   if self.context.sessionId then
     return Promise.FromResult(self.context.sessionId)
   end
@@ -888,7 +889,7 @@ function ToggletClient:resolveSessionId()
   end)
 end
 
-function ToggletClient:getHeaders()
+function M:getHeaders()
   local headers = {
     [self.headerName] = self.clientKey,
     ["Accept"] = "application/json",
@@ -915,7 +916,7 @@ function ToggletClient:getHeaders()
   return headers
 end
 
-function ToggletClient:storeToggles(toggleArray)
+function M:storeToggles(toggleArray)
   local newTogglesArray = toggleArray or {}
 
   local oldTogglesMap = self.realtimeTogglesMap
@@ -970,11 +971,11 @@ function ToggletClient:storeToggles(toggleArray)
   return self.storage:Store(TOGGLES_KEY, newTogglesArray)
 end
 
-function ToggletClient:isTogglesStorageTTLEnabled()
+function M:isTogglesStorageTTLEnabled()
   return self.experimental.togglesStorageTTL and self.experimental.togglesStorageTTL > 0
 end
 
-function ToggletClient:isUpToDate()
+function M:isUpToDate()
   if not self:isTogglesStorageTTLEnabled() then
     return false
   end
@@ -986,7 +987,7 @@ function ToggletClient:isUpToDate()
       now - self.lastRefreshTimestamp <= ttl
 end
 
-function ToggletClient:loadLastRefreshTimestamp()
+function M:loadLastRefreshTimestamp()
   if not self:isTogglesStorageTTLEnabled() then
     return Promise.FromResult(0)
   end
@@ -998,7 +999,7 @@ function ToggletClient:loadLastRefreshTimestamp()
   end)
 end
 
-function ToggletClient:storeLastRefreshTimestamp()
+function M:storeLastRefreshTimestamp()
   if not self:isTogglesStorageTTLEnabled() then
     return Promise.Completed()
   end
@@ -1012,7 +1013,7 @@ function ToggletClient:storeLastRefreshTimestamp()
   return self.storage:Store(LAST_UPDATE_KEY, lastUpdateValue)
 end
 
-function ToggletClient:initialFetchToggles()
+function M:initialFetchToggles()
   self.logger:Info("🔄 Initial fetch toggles")
 
   if self:isUpToDate() then
@@ -1031,7 +1032,7 @@ function ToggletClient:initialFetchToggles()
   end)
 end
 
-function ToggletClient:contextWithAppName()
+function M:contextWithAppName()
   local context = {
     -- static context fields
     appName = self.appName,
@@ -1057,7 +1058,7 @@ function ToggletClient:contextWithAppName()
   return context
 end
 
-function ToggletClient:fetchToggles(retry)
+function M:fetchToggles(retry)
   self.fetching = true
 
   if not retry then
@@ -1100,7 +1101,7 @@ function ToggletClient:fetchToggles(retry)
 end
 
 -- 재시도중에는 fetching이 true임.
-function ToggletClient:handleFetchResponse(url, method, headers, body, response, promise)
+function M:handleFetchResponse(url, method, headers, body, response, promise)
   if response.status >= 200 and response.status <= 299 or response.status == 304 then
     self.fetching = false
 
@@ -1147,7 +1148,7 @@ function ToggletClient:handleFetchResponse(url, method, headers, body, response,
   end
 end
 
-function ToggletClient:parseAndValidateResponse(url, method, response)
+function M:parseAndValidateResponse(url, method, response)
   local success, data, err = pcall(Json.decode, response.body)
   if not success then
     local jsonErrorDetail = ErrorHelper.GetJsonDecodingErrorDetail("exception")
@@ -1295,7 +1296,7 @@ function ToggletClient:parseAndValidateResponse(url, method, response)
   return data, nil
 end
 
-function ToggletClient:processSuccessfulResponse(data, promise)
+function M:processSuccessfulResponse(data, promise)
   return self:storeToggles(data.toggles)
       :Next(function()
         if self.sdkState ~= "healthy" then
@@ -1324,29 +1325,29 @@ function ToggletClient:processSuccessfulResponse(data, promise)
       end)
 end
 
-function ToggletClient:emit(event, ...)
+function M:emit(event, ...)
   self.eventEmitter:Emit(event, ...)
 end
 
-function ToggletClient:On(event, callback)
+function M:On(event, callback)
   if self.offline then return function() end end
 
   return self.eventEmitter:On(event, callback)
 end
 
-function ToggletClient:Once(event, callback)
+function M:Once(event, callback)
   if self.offline then return function() end end
 
   return self.eventEmitter:Once(event, callback)
 end
 
-function ToggletClient:Off(event, callback)
+function M:Off(event, callback)
   if self.offline then return end
 
   self.eventEmitter:Off(event, callback)
 end
 
-function ToggletClient:createError(type, message, functionName, detail)
+function M:createError(type, message, functionName, detail)
   local errorData = {
     type = type,
     message = message,
@@ -1364,7 +1365,7 @@ function ToggletClient:createError(type, message, functionName, detail)
   return errorData
 end
 
-function ToggletClient:emitError(type, message, functionName, logLevel, detail)
+function M:emitError(type, message, functionName, logLevel, detail)
   local errorData = self:createError(type, message, functionName, detail)
 
   -- Set default log level to Warning
@@ -1397,4 +1398,4 @@ function ToggletClient:emitError(type, message, functionName, logLevel, detail)
   return errorData
 end
 
-return ToggletClient
+return M

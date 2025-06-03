@@ -2,8 +2,9 @@ local Json = require("framework.3rdparty.togglet.dkjson")
 local Validation = require("framework.3rdparty.togglet.validation")
 local ErrorTypes = require("framework.3rdparty.togglet.error-types")
 
-local ToggleProxy = {}
-ToggleProxy.__index = ToggleProxy
+local M = {}
+M.__index = M
+M.__name = "ToggleProxy"
 
 -- Constants for common default values
 local DEFAULT_VALUES = {
@@ -37,41 +38,41 @@ local function validatePayload(self, expectedType, defaultValue)
   return true, self.variant.payload.value
 end
 
-function ToggleProxy.New(client, featureName, variant)
-  Validation.RequireValue(client, "client", "ToggleProxy.New")
-  Validation.RequireName(featureName, "featureName", "ToggleProxy.New")
-  Validation.RequireTable(variant, "variant", "ToggleProxy.New")
+function M.New(client, featureName, variant)
+  Validation.RequireValue(client, "client", "M.New")
+  Validation.RequireName(featureName, "featureName", "M.New")
+  Validation.RequireTable(variant, "variant", "M.New")
 
-  local self = setmetatable({}, ToggleProxy)
+  local self = setmetatable({}, M)
   self.client = client
   self.featureName = featureName
   self.variant = variant
   return self
 end
 
-function ToggleProxy:FeatureName()
+function M:GetFeatureName()
   return self.featureName
 end
 
-function ToggleProxy:VariantName(defaultVariantName)
+function M:GetVariantName(defaultVariantName)
   return self.variant.name or defaultVariantName or "disabled"
 end
 
-function ToggleProxy:RawVariant()
+function M:GetVariant()
   return self.variant
 end
 
-function ToggleProxy:IsEnabled()
+function M:IsEnabled()
   return self.variant.feature_enabled or DEFAULT_VALUES.BOOLEAN
 end
 
-function ToggleProxy:BoolVariation(defaultValue)
+function M:BoolVariation(defaultValue)
   Validation.RequireBoolean(defaultValue, "defaultValue", "BoolVariation")
 
   return self.variant.feature_enabled or defaultValue
 end
 
-function ToggleProxy:NumberVariation(defaultValue, min, max)
+function M:NumberVariation(defaultValue, min, max)
   Validation.RequireNumber(defaultValue, "defaultValue", "NumberVariation")
 
   local isPayloadValid, payloadValue = validatePayload(self, "number", defaultValue)
@@ -94,7 +95,7 @@ function ToggleProxy:NumberVariation(defaultValue, min, max)
     -- self.client:emitError(
     --   ErrorTypes.CONVERSION_ERROR,
     --   "Failed to convert value to number",
-    --   "ToggleProxy:NumberVariation",
+    --   "M:NumberVariation",
     --   nil, -- use default log level
     --   {
     --     featureName = self.featureName,
@@ -109,7 +110,7 @@ function ToggleProxy:NumberVariation(defaultValue, min, max)
   end
 end
 
-function ToggleProxy:StringVariation(defaultValue)
+function M:StringVariation(defaultValue)
   Validation.RequireString(defaultValue, "defaultValue", "StringVariation", true) -- allow empty
 
   local isPayloadValid, payloadValue = validatePayload(self, "string", defaultValue)
@@ -125,7 +126,7 @@ function ToggleProxy:StringVariation(defaultValue)
   end
 end
 
-function ToggleProxy:JsonVariation(defaultValue)
+function M:JsonVariation(defaultValue)
   Validation.RequireTable(defaultValue, "defaultValue", "JsonVariation")
 
   local isPayloadValid, payloadValue = validatePayload(self, "json", defaultValue)
@@ -145,7 +146,7 @@ function ToggleProxy:JsonVariation(defaultValue)
     -- self.client:emitError(
     --   ErrorTypes.JSON_ERROR,
     --   "Failed to decode JSON payload",
-    --   "ToggleProxy:JsonVariation",
+    --   "M:JsonVariation",
     --   nil, -- use default log level
     --   {
     --     featureName = self.featureName,
@@ -163,7 +164,7 @@ function ToggleProxy:JsonVariation(defaultValue)
 end
 
 -- TODO 이름이 모호해서 일단은 기능을 막아둠.
--- function ToggleProxy:Variation(defaultValue)
+-- function M:Variation(defaultValue)
 --   if not self.variant or not self.variant.payload then
 --     return defaultValue
 --   end
@@ -205,7 +206,7 @@ end
 --     self.client:emitError(
 --       ErrorTypes.INVALID_PAYLOAD_TYPE,
 --       "Unknown payload type",
---       "ToggleProxy:GetVariation",
+--       "M:GetVariation",
 --       nil,
 --       {
 --         featureName = self.featureName,
@@ -219,17 +220,17 @@ end
 --   end
 -- end
 
-function ToggleProxy:GetPayloadType()
+function M:GetPayloadType()
   return self.variant.payload and self.variant.payload.type or "<none>"
 end
 
 -- Cache for variant proxies to avoid creating new objects for the same feature/variant
-ToggleProxy.cache = setmetatable({}, { __mode = "v" })
+M.cache = setmetatable({}, { __mode = "v" })
 
 -- Factory method that uses caching
-function ToggleProxy.GetOrCreate(client, featureName, variant)
+function M.GetOrCreate(client, featureName, variant)
   local cacheKey = featureName .. ":" .. (variant and variant.name or "default")
-  local cached = ToggleProxy.cache[cacheKey]
+  local cached = M.cache[cacheKey]
 
   if cached then
     local isSameReference = cached.variant == variant
@@ -253,9 +254,9 @@ function ToggleProxy.GetOrCreate(client, featureName, variant)
     end
   end
 
-  local proxy = ToggleProxy.New(client, featureName, variant)
-  ToggleProxy.cache[cacheKey] = proxy
+  local proxy = M.New(client, featureName, variant)
+  M.cache[cacheKey] = proxy
   return proxy
 end
 
-return ToggleProxy
+return M

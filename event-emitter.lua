@@ -4,8 +4,9 @@ local PREFIX = "__listener__"
 local PREFIX_LENGTH = #PREFIX
 local DEFAULT_MAX_LISTENERS = 10
 
-local EventEmitter = {}
-EventEmitter.__index = EventEmitter
+local M = {}
+M.__index = M
+M.__name = "EventEmtter"
 
 local function removeEntry(t, pred)
   local i = 1
@@ -42,16 +43,16 @@ local function getCachedEventName(event)
   return cached
 end
 
-function EventEmitter.New(config)
+function M.New(config)
   local self = {}
 
-  self.logger = config.loggerFactory:CreateLogger("EventEmitter")
+  self.logger = config.loggerFactory:CreateLogger("M")
   self.client = config.client
   self.on = {}
   self.currentMaxListeners = DEFAULT_MAX_LISTENERS
 
   return _G.setmetatable_gc(self, {
-    __index = EventEmitter,
+    __index = M,
     __gc = function(instance)
       if instance.on then
         for _, listeners in pairs(instance.on) do
@@ -69,7 +70,7 @@ function EventEmitter.New(config)
   })
 end
 
-function EventEmitter:getSafeEventTable(event)
+function M:getSafeEventTable(event)
   if type(self.on[event]) ~= "table" then
     self.on[event] = {}
   end
@@ -77,11 +78,11 @@ function EventEmitter:getSafeEventTable(event)
   return self.on[event]
 end
 
-function EventEmitter:getEventTable(event)
+function M:getEventTable(event)
   return self.on[event]
 end
 
-function EventEmitter:hasListener(event, listener)
+function M:hasListener(event, listener)
   local eventTable = self:getEventTable(event)
   if not eventTable then
     return false
@@ -96,12 +97,12 @@ function EventEmitter:hasListener(event, listener)
   return false
 end
 
-function EventEmitter:AddListener(event, listener)
+function M:AddListener(event, listener)
   if type(listener) ~= "function" then
     self.client:emitError(
       ErrorTypes.INVALID_ARGUMENT,
       "Listener must be a function",
-      "EventEmitter:AddListener",
+      "M:AddListener",
       nil, -- use default log level
       { providedType = type(listener), event = tostring(event) }
     )
@@ -133,16 +134,16 @@ function EventEmitter:AddListener(event, listener)
   end
 end
 
-function EventEmitter:On(event, listener)
+function M:On(event, listener)
   return self:AddListener(event, listener)
 end
 
-function EventEmitter:OnWeak(event, listener)
+function M:OnWeak(event, listener)
   if type(listener) ~= "function" then
     self.client:emitError(
       ErrorTypes.INVALID_ARGUMENT,
       "Listener must be a function",
-      "EventEmitter:OnWeak",
+      "M:OnWeak",
       nil, -- use default log level
       { providedType = type(listener), event = tostring(event) }
     )
@@ -172,12 +173,12 @@ function EventEmitter:OnWeak(event, listener)
   end
 end
 
-function EventEmitter:Once(event, listener)
+function M:Once(event, listener)
   if type(listener) ~= "function" then
     self.client:emitError(
       ErrorTypes.INVALID_ARGUMENT,
       "Listener must be a function",
-      "EventEmitter:Once",
+      "M:Once",
       nil, -- use default log level
       { providedType = type(listener), event = tostring(event) }
     )
@@ -209,15 +210,15 @@ function EventEmitter:Once(event, listener)
   end
 end
 
-function EventEmitter:Off(event, listener)
+function M:Off(event, listener)
   self:RemoveListener(event, listener)
 end
 
-function EventEmitter:OffAll(event)
+function M:OffAll(event)
   return self:RemoveAllListeners(event)
 end
 
-function EventEmitter:Emit(event, ...)
+function M:Emit(event, ...)
   local args = { ... }
   local eventName = tostring(event)
   local status, error
@@ -240,7 +241,7 @@ function EventEmitter:Emit(event, ...)
         self.client:emitError(
           ErrorTypes.EVENT_EMITTER_CALLBACK_ERROR,
           "Event listener callback failed: " .. tostring(error),
-          "EventEmitter:Emit",
+          "M:Emit",
           nil, -- use default log level
           {
             event = eventName,
@@ -279,7 +280,7 @@ function EventEmitter:Emit(event, ...)
           self.client:emitError(
             ErrorTypes.EVENT_EMITTER_CALLBACK_ERROR,
             "Weak event listener callback failed: " .. tostring(error),
-            "EventEmitter:Emit",
+            "M:Emit",
             nil, -- use default log level
             {
               event = eventName,
@@ -314,7 +315,7 @@ function EventEmitter:Emit(event, ...)
         self.client:emitError(
           ErrorTypes.EVENT_EMITTER_CALLBACK_ERROR,
           "Once event listener callback failed: " .. tostring(error),
-          "EventEmitter:Emit",
+          "M:Emit",
           nil, -- use default log level
           {
             event = eventName,
@@ -331,11 +332,11 @@ function EventEmitter:Emit(event, ...)
   return self
 end
 
-function EventEmitter:GetMaxListeners()
+function M:GetMaxListeners()
   return self.currentMaxListeners or DEFAULT_MAX_LISTENERS
 end
 
-function EventEmitter:ListenerCount(event)
+function M:ListenerCount(event)
   local totalNum = 0
   local eventPrefix = getCachedEventName(event)
   local eventTable = self:getEventTable(eventPrefix)
@@ -365,11 +366,11 @@ function EventEmitter:ListenerCount(event)
   return totalNum
 end
 
-function EventEmitter:HasListeners(event)
+function M:HasListeners(event)
   return self:ListenerCount(event) > 0
 end
 
-function EventEmitter:Listeners(event)
+function M:Listeners(event)
   local clone = {}
   local count = 0
 
@@ -408,7 +409,7 @@ function EventEmitter:Listeners(event)
   return clone
 end
 
-function EventEmitter:RemoveAllListeners(event)
+function M:RemoveAllListeners(event)
   if event then
     local eventPrefix = getCachedEventName(event)
     self.on[eventPrefix] = nil
@@ -421,12 +422,12 @@ function EventEmitter:RemoveAllListeners(event)
   return self
 end
 
-function EventEmitter:RemoveListener(event, listener)
+function M:RemoveListener(event, listener)
   if not listener then
     self.client:emitError(
       ErrorTypes.INVALID_ARGUMENT,
       "Listener cannot be nil",
-      "EventEmitter:RemoveListener",
+      "M:RemoveListener",
       nil,   -- use default log level
       { event = tostring(event) }
     )
@@ -469,14 +470,14 @@ function EventEmitter:RemoveListener(event, listener)
   return self
 end
 
-function EventEmitter:SetMaxListeners(n)
+function M:SetMaxListeners(n)
   if type(n) == "number" and n >= 0 then
     self.currentMaxListeners = n
   else
     self.client:emitError(
       ErrorTypes.INVALID_ARGUMENT,
       "MaxListeners must be a non-negative number",
-      "EventEmitter:SetMaxListeners",
+      "M:SetMaxListeners",
       nil, -- use default log level
       { providedValue = tostring(n), providedType = type(n) }
     )
@@ -484,7 +485,7 @@ function EventEmitter:SetMaxListeners(n)
   return self
 end
 
-function EventEmitter:CleanupWeakListeners()
+function M:CleanupWeakListeners()
   for eventPrefix, eventTable in pairs(self.on) do
     if string.find(eventPrefix, "_weak$") and type(eventTable) == "table" then
       local hasValidListeners = false
@@ -505,4 +506,4 @@ function EventEmitter:CleanupWeakListeners()
   return self
 end
 
-return EventEmitter
+return M

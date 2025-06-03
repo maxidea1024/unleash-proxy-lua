@@ -1,15 +1,16 @@
 local Promise = require("framework.3rdparty.togglet.promise")
 
-local InMemoryStorageProvider = {}
-InMemoryStorageProvider.__index = InMemoryStorageProvider
+local M = {}
+M.__index = M
+M.__name = "InMemoryStorageProvider"
 
-function InMemoryStorageProvider.New()
-  local self = setmetatable({}, InMemoryStorageProvider)
+function M.New()
+  local self = setmetatable({}, M)
   self.store = {}
   return self
 end
 
-function InMemoryStorageProvider:Store(key, data)
+function M:Store(key, data)
   local promise = Promise.New()
 
   if type(key) ~= "string" then
@@ -22,7 +23,7 @@ function InMemoryStorageProvider:Store(key, data)
   return promise
 end
 
-function InMemoryStorageProvider:Load(key)
+function M:Load(key)
   local promise = Promise.New()
 
   if type(key) ~= "string" then
@@ -35,4 +36,4 @@ function InMemoryStorageProvider:Load(key)
   return promise
 end
 
-return InMemoryStorageProvider
+return M

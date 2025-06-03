@@ -1,28 +1,29 @@
-local WatchToggleGroup = {}
-WatchToggleGroup.__index = WatchToggleGroup
+local M = {}
+M.__index = M
+M.__name = "WatchToggleGroup"
 
-function WatchToggleGroup.New(client)
-  local self = setmetatable({}, WatchToggleGroup)
+function M.New(client)
+  local self = setmetatable({}, M)
   self.client = client
   self.unregisters = {}
   return self
 end
 
-function WatchToggleGroup:WatchToggle(featureName, callback)
-  self.client:WatchToggle(featureName, callback)
+function M:WatchToggle(featureName, callback)
+  table.insert(self.unregisters, self.client:WatchToggle(featureName, callback))
   return self
 end
 
-function WatchToggleGroup:WatchToggleWithInitialState(featureName, callback)
-  self.client:WatchToggleWithInitialState(featureName, callback)
+function M:WatchToggleWithInitialState(featureName, callback)
+  table.insert(self.unregisters, self.client:WatchToggleWithInitialState(featureName, callback))
   return self
 end
 
-function WatchToggleGroup:UnwatchAll()
-  for _, unregister ipairs(self.unregisters) do
+function M:UnwatchAll()
+  for _, unregister in ipairs(self.unregisters) do
     unregister()
   end
   self.unregisters = {}
 end
 
-return WatchToggleGroup
+return M

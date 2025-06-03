@@ -2,17 +2,18 @@ local Json = require("framework.3rdparty.togglet.dkjson")
 local Util = require("framework.3rdparty.togglet.util")
 local Promise = require("framework.3rdparty.togglet.promise")
 
-local FileStorageProvider = {}
-FileStorageProvider.__index = FileStorageProvider
+local M = {}
+M.__index = M
+M.__name = "StorageProviderFile"
 
-function FileStorageProvider.New(backupPath, prefix)
-  local self = setmetatable({}, FileStorageProvider)
+function M.New(backupPath, prefix)
+  local self = setmetatable({}, M)
   self.backupPath = backupPath or Util.GetTempDir()
   self.prefix = prefix or ""
   return self
 end
 
-function FileStorageProvider:Store(key, data)
+function M:Store(key, data)
   local promise = Promise.New()
 
   local filename = self:getStorageFilename(key)
@@ -41,7 +42,7 @@ function FileStorageProvider:Store(key, data)
   return promise
 end
 
-function FileStorageProvider:Load(key)
+function M:Load(key)
   local promise = Promise.New()
 
   local filename = self:getStorageFilename(key)
@@ -80,7 +81,7 @@ function FileStorageProvider:Load(key)
   return promise
 end
 
-function FileStorageProvider:getStorageFilename(key)
+function M:getStorageFilename(key)
   local prefix
   if self.prefix and #self.prefix > 0 then
     prefix = self.prefix .. "-"
@@ -92,4 +93,4 @@ function FileStorageProvider:getStorageFilename(key)
   return filename
 end
 
-return FileStorageProvider
+return M

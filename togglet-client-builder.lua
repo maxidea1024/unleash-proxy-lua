@@ -1,13 +1,14 @@
 local Validation = require("framework.3rdparty.togglet.validation")
 local Logging = require("framework.3rdparty.togglet.logging")
 
-local ToggletClientBuilder = {}
-ToggletClientBuilder.__index = ToggletClientBuilder
+local M = {}
+M.__index = M
+M.__name = "ToggletClientBuilder"
 
-function ToggletClientBuilder.New(appName)
+function M.New(appName)
   Validation.RequireString(appName, "appName", "ToggletClientBuilder.New")
 
-  local self = setmetatable({}, ToggletClientBuilder)
+  local self = setmetatable({}, M)
 
   self.config = {
     appName = appName
@@ -16,108 +17,108 @@ function ToggletClientBuilder.New(appName)
   return self
 end
 
-function ToggletClientBuilder:Url(url)
+function M:Url(url)
   Validation.RequireString(url, "url", "ToggletClientBuilder:Url")
   self.config.url = url
   return self
 end
 
-function ToggletClientBuilder:ClientKey(clientKey)
+function M:ClientKey(clientKey)
   Validation.RequireString(clientKey, "clientKey", "ToggletClientBuilder:ClientKey")
   self.config.clientKey = clientKey
   return self
 end
 
-function ToggletClientBuilder:Request(requestFn)
+function M:Request(requestFn)
   Validation.RequireFunction(requestFn, "requestFn", "ToggletClientBuilder:Request")
   self.config.request = requestFn
   return self
 end
 
-function ToggletClientBuilder:Environment(environment)
+function M:Environment(environment)
   Validation.RequireString(environment, "environment", "ToggletClientBuilder:Environment")
   self.config.environment = environment
   return self
 end
 
-function ToggletClientBuilder:Context(context)
+function M:Context(context)
   Validation.RequireTable(context, "context", "ToggletClientBuilder:Context")
   self.config.context = context
   return self
 end
 
-function ToggletClientBuilder:Bootstrap(bootstrap)
+function M:Bootstrap(bootstrap)
   Validation.RequireTable(bootstrap, "bootstrap", "ToggletClientBuilder:Bootstrap")
   self.config.bootstrap = bootstrap
   return self
 end
 
-function ToggletClientBuilder:BootstrapOverride(override)
+function M:BootstrapOverride(override)
   self.config.bootstrapOverride = override or true
   return self
 end
 
-function ToggletClientBuilder:Offline(offline)
+function M:Offline(offline)
   self.config.offline = offline or true
   return self
 end
 
-function ToggletClientBuilder:DevMode(devMode)
+function M:DevMode(devMode)
   self.config.enableDevMode = devMode or true
   return self
 end
 
-function ToggletClientBuilder:DisableAutoStart(disable)
+function M:DisableAutoStart(disable)
   self.config.disableAutoStart = disable or true
   return self
 end
 
-function ToggletClientBuilder:ExplicitSyncMode(explicitSync)
+function M:ExplicitSyncMode(explicitSync)
   self.config.useExplicitSyncMode = explicitSync or true
   return self
 end
 
-function ToggletClientBuilder:RefreshInterval(interval)
+function M:RefreshInterval(interval)
   Validation.RequireNumber(interval, "interval", "ToggletClientBuilder:RefreshInterval", 0, 180)
   self.config.refreshInterval = interval
   return self
 end
 
-function ToggletClientBuilder:DisableRefresh(disable)
+function M:DisableRefresh(disable)
   self.config.disableRefresh = disable or true
   return self
 end
 
-function ToggletClientBuilder:DisableMetrics(disable)
+function M:DisableMetrics(disable)
   self.config.disableMetrics = disable or true
   return self
 end
 
-function ToggletClientBuilder:MetricsIntervalInitial(interval)
+function M:MetricsIntervalInitial(interval)
   Validation.RequireNumber(interval, "interval", "ToggletClientBuilder:MetricsIntervalInitial", 0, 180)
   self.config.metricsIntervalInitial = interval
   return self
 end
 
-function ToggletClientBuilder:MetricsInterval(interval)
+function M:MetricsInterval(interval)
   Validation.RequireNumber(interval, "interval", "ToggletClientBuilder:MetricsInterval", 0, 300)
   self.config.metricsInterval = interval
   return self
 end
 
-function ToggletClientBuilder:ImpressionDataAll(enable)
+function M:ImpressionDataAll(enable)
   self.config.impressionDataAll = enable or true
   return self
 end
 
 -- TODO 로깅시스템 개편과 더불어 수정해줘야함
-function ToggletClientBuilder:LoggerFactory(loggerFactory)
+function M:LoggerFactory(loggerFactory)
   self.config.loggerFactory = loggerFactory
   return self
 end
 
 -- TODO 로깅시스템 개편과 더불어 수정해줘야함
-function ToggletClientBuilder:LogLevel(logLevel)
+function M:LogLevel(logLevel)
   local level = Logging.LogLevel[logLevel:gsub("^%l", string.upper)]
   if not level then
     error("Invalid log level: " .. tostring(logLevel))
@@ -131,12 +132,12 @@ function ToggletClientBuilder:LogLevel(logLevel)
 end
 
 -- TODO 외부로 노출하는게 바람직할까?
-function ToggletClientBuilder:StorageProvider(storageProvider)
+function M:StorageProvider(storageProvider)
   self.config.storageProvider = storageProvider
   return self
 end
 
-function ToggletClientBuilder:Backoff(min, max, factor, jitter)
+function M:Backoff(min, max, factor, jitter)
   self.config.backoff = {
     min = min or 1,
     max = max or 10,
@@ -146,30 +147,30 @@ function ToggletClientBuilder:Backoff(min, max, factor, jitter)
   return self
 end
 
-function ToggletClientBuilder:HeaderName(headerName)
+function M:HeaderName(headerName)
   Validation.RequireString(headerName, "headerName", "ToggletClientBuilder:HeaderName")
   self.config.headerName = headerName
   return self
 end
 
-function ToggletClientBuilder:CustomHeaders(headers)
+function M:CustomHeaders(headers)
   Validation.RequireTable(headers, "headers", "ToggletClientBuilder:CustomHeaders")
   self.config.customHeaders = headers
   return self
 end
 
-function ToggletClientBuilder:UsePOSTRequests(usePOST)
+function M:UsePOSTRequests(usePOST)
   self.config.usePOSTrequests = usePOST or true
   return self
 end
 
-function ToggletClientBuilder:Experimental(experimental)
+function M:Experimental(experimental)
   Validation.RequireTable(experimental, "experimental", "ToggletClientBuilder:Experimental")
   self.config.experimental = experimental
   return self
 end
 
-function ToggletClientBuilder:TogglesStorageTTL(ttl)
+function M:TogglesStorageTTL(ttl)
   Validation.RequireNumber(ttl, "ttl", "ToggletClientBuilder:TogglesStorageTTL", 0, 3600)
 
   if not self.config.experimental then
@@ -180,7 +181,7 @@ function ToggletClientBuilder:TogglesStorageTTL(ttl)
   return self
 end
 
-function ToggletClientBuilder:OnError(callback)
+function M:OnError(callback)
   if self.onErrorCallbacks then
     table.insert(self.onErrorCallbacks, callback)
   else
@@ -189,7 +190,7 @@ function ToggletClientBuilder:OnError(callback)
   return self
 end
 
-function ToggletClientBuilder:OnInit(callback)
+function M:OnInit(callback)
   if self.onInitCallbacks then
     table.insert(self.onInitCallbacks, callback)
   else
@@ -198,7 +199,7 @@ function ToggletClientBuilder:OnInit(callback)
   return self
 end
 
-function ToggletClientBuilder:OnReady(callback)
+function M:OnReady(callback)
   if self.onReadyCallbacks then
     table.insert(self.onReadyCallbacks, callback)
   else
@@ -207,7 +208,7 @@ function ToggletClientBuilder:OnReady(callback)
   return self
 end
 
-function ToggletClientBuilder:OnUpdate(callback)
+function M:OnUpdate(callback)
   if self.onUpdateCallbacks then
     table.insert(self.onUpdateCallbacks, callback)
   else
@@ -216,7 +217,7 @@ function ToggletClientBuilder:OnUpdate(callback)
   return self
 end
 
-function ToggletClientBuilder:OnSent(callback)
+function M:OnSent(callback)
   if self.onSentCallbacks then
     table.insert(self.onSentCallbacks, callback)
   else
@@ -225,12 +226,12 @@ function ToggletClientBuilder:OnSent(callback)
   return self
 end
 
-function ToggletClientBuilder:WatchToggle(featureName, callback)
+function M:WatchToggle(featureName, callback)
   -- TODO
   return self
 end
 
-function ToggletClientBuilder:Build()
+function M:Build()
   local config = self.config
 
   if not config.offline then
@@ -251,4 +252,4 @@ function ToggletClientBuilder:Build()
   return ToggletClient.New(config)
 end
 
-return ToggletClientBuilder
+return M

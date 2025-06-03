@@ -1,29 +1,32 @@
-local MetricsReporterNoop = {}
-MetricsReporterNoop.__index = MetricsReporterNoop
+local Promise = require("framework.3rdparty.togglet.promise")
 
-function MetricsReporterNoop.New(config)
-  local self = setmetatable({}, MetricsReporterNoop)
+local M = {}
+M.__index = M
+M.__name = "MetricsReporterNoop"
+
+function M.New(config)
+  local self = setmetatable({}, M)
   return self
 end
 
-function MetricsReporterNoop:Start()
+function M:Start()
   return Promise.Completed()
 end
 
-function MetricsReporterNoop:Stop()
+function M:Stop()
   return Promise.Completed()
 end
 
-function MetricsReporterNoop:SendMetrics()
+function M:SendMetrics()
   return Promise.Completed()
 end
 
-function MetricsReporterNoop:Count(name, enabled)
+function M:Count(name, enabled)
   return true
 end
 
-function MetricsReporterNoop:CountVariant(name, variant)
+function M:CountVariant(name, variant)
   return true
 end
 
-return MetricsReporterNoop
+return M

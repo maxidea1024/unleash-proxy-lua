@@ -7,41 +7,43 @@ local ErrorTypes = require("framework.3rdparty.togglet.error-types")
 local ErrorHelper = require("framework.3rdparty.togglet.error-helper")
 local Validation = require("framework.3rdparty.togglet.validation")
 local Timer = require("framework.3rdparty.togglet.timer")
+local Promise = require("framework.3rdparty.togglet.promise")
 
-local MetricsReporter = {}
-MetricsReporter.__index = MetricsReporter
+local M = {}
+M.__index = M
+M.__name = "MetricsReporter"
 
-function MetricsReporter.New(config)
-  Validation.RequireTable(config, "config", "MetricsReporter.New")
-  Validation.RequireField(config, "client", "config", "MetricsReporter.New")
-  Validation.RequireField(config, "appName", "config", "MetricsReporter.New")
-  Validation.RequireField(config, "connectionId", "config", "MetricsReporter.New")
-  Validation.RequireField(config, "url", "config", "MetricsReporter.New")
-  Validation.RequireField(config, "clientKey", "config", "MetricsReporter.New")
-  Validation.RequireField(config, "request", "config", "MetricsReporter.New")
-  Validation.RequireField(config, "loggerFactory", "config", "MetricsReporter.New")
+function M.New(config)
+  Validation.RequireTable(config, "config", "M.New")
+  Validation.RequireField(config, "client", "config", "M.New")
+  Validation.RequireField(config, "appName", "config", "M.New")
+  Validation.RequireField(config, "connectionId", "config", "M.New")
+  Validation.RequireField(config, "url", "config", "M.New")
+  Validation.RequireField(config, "clientKey", "config", "M.New")
+  Validation.RequireField(config, "request", "config", "M.New")
+  Validation.RequireField(config, "loggerFactory", "config", "M.New")
 
   if config.metricsInterval ~= nil then
-    Validation.RequireNumber(config.metricsInterval, "config.metricsInterval", "MetricsReporter.New", 0)
+    Validation.RequireNumber(config.metricsInterval, "config.metricsInterval", "M.New", 0)
   end
 
   if config.metricsIntervalInitial ~= nil then
-    Validation.RequireNumber(config.metricsIntervalInitial, "config.metricsIntervalInitial", "MetricsReporter.New", 0)
+    Validation.RequireNumber(config.metricsIntervalInitial, "config.metricsIntervalInitial", "M.New", 0)
   end
 
   if config.disableMetrics ~= nil then
-    Validation.RequireBoolean(config.disableMetrics, "config.disableMetrics", "MetricsReporter.New")
+    Validation.RequireBoolean(config.disableMetrics, "config.disableMetrics", "M.New")
   end
 
   if config.customHeaders ~= nil then
-    Validation.RequireTable(config.customHeaders, "config.customHeaders", "MetricsReporter.New")
+    Validation.RequireTable(config.customHeaders, "config.customHeaders", "M.New")
   end
 
   if config.onSent ~= nil then
-    Validation.RequireFunction(config.onSent, "config.onSent", "MetricsReporter.New")
+    Validation.RequireFunction(config.onSent, "config.onSent", "M.New")
   end
 
-  local self = setmetatable({}, MetricsReporter)
+  local self = setmetatable({}, M)
   self.logger = config.loggerFactory:CreateLogger("MetricsReporter")
   self.client = config.client
   self.onSent = config.onSent or function() end
@@ -61,12 +63,12 @@ function MetricsReporter.New(config)
   return self
 end
 
-function MetricsReporter:Start()
+function M:Start()
   if type(self.metricsInterval) == "number" and self.metricsInterval > 0 then
     -- Check for already timer was started.
     if self.timerRunning then
       self.logger:Warn("Timer already running")
-      return false
+      return Promise.Completed()
     end
 
     self.timerRunning = true
@@ -86,17 +88,18 @@ function MetricsReporter:Start()
       end
     end)
 
-    return true
+    return Promise.Completed()
   end
 
-  return false
+  return Promise.Completed()
 end
 
-function MetricsReporter:Stop()
+function M:Stop()
   self.timerRunning = false
+  return Promise.Completed()
 end
 
-function MetricsReporter:createEmptyBucket()
+function M:createEmptyBucket()
   return {
     start = Util.Iso8601UtcNowWithMSec(),
     stop = nil,
@@ -104,7 +107,7 @@ function MetricsReporter:createEmptyBucket()
   }
 end
 
-function MetricsReporter:getHeaders()
+function M:getHeaders()
   local headers = {
     ["Accept"] = "application/json",
     ["Content-Type"] = "application/json",
@@ -124,12 +127,12 @@ function MetricsReporter:getHeaders()
   return headers
 end
 
-function MetricsReporter:SendMetrics()
+function M:SendMetrics()
   local url = self.url .. "/client/metrics"
   local payload = self:getPayload()
 
   if Util.IsEmptyTable(payload.bucket.toggles) then
-    return
+    return Promise.Completed()
   end
 
   local headers = self:getHeaders()
@@ -144,23 +147,26 @@ function MetricsReporter:SendMetrics()
 
   local success, jsonBody = pcall(Json.encode, payload)
   if not success then
-    self.client:emitError(
+    local error = self.client:emitError(
       ErrorTypes.JSON_ERROR,
       "Failed to encode metrics JSON: " .. tostring(jsonBody),
-      "MetricsReporter:SendMetrics",
+      "M:SendMetrics",
       Logging.LogLevel.Error,
       Util.MergeTable({
         payload = payload,
         errorMessage = tostring(jsonBody)
       }, ErrorHelper.GetJsonEncodingErrorDetail(tostring(jsonBody), "payload"))
     )
-    return
+    return Promise.FromError(error)
   end
 
   -- Note: When using the POST method, you must specify the Content-Length
   headers["Content-Length"] = tostring(#jsonBody)
 
+  local promise = Promise.New()
   self.request(url, "POST", headers, jsonBody, function(response)
+    promise:Resolve()
+
     if response.status >= 200 and response.status < 300 then
       self.backoffs = 0
 
@@ -171,7 +177,7 @@ function MetricsReporter:SendMetrics()
       self.client:emitError(
         ErrorTypes.HTTP_ERROR,
         "Failed to send metrics: " .. response.status,
-        "MetricsReporter:SendMetrics",
+        "M:SendMetrics",
         Logging.LogLevel.Error,
         ErrorHelper.BuildHttpErrorDetail(url, response.status, {
           context = "metrics",
@@ -186,9 +192,11 @@ function MetricsReporter:SendMetrics()
       )
     end
   end)
+
+  return promise
 end
 
-function MetricsReporter:Count(name, enabled)
+function M:Count(name, enabled)
   self:ensureBucketExists(name)
 
   local yesOrNo = enabled and "yes" or "no"
@@ -196,14 +204,14 @@ function MetricsReporter:Count(name, enabled)
   return true
 end
 
-function MetricsReporter:CountVariant(name, variant)
+function M:CountVariant(name, variant)
   self:ensureBucketExists(name)
 
   self.bucket.toggles[name].variants[variant] = (self.bucket.toggles[name].variants[variant] or 0) + 1
   return true
 end
 
-function MetricsReporter:ensureBucketExists(name)
+function M:ensureBucketExists(name)
   if not self.bucket.toggles[name] then
     self.bucket.toggles[name] = {
       yes = 0,
@@ -214,7 +222,7 @@ function MetricsReporter:ensureBucketExists(name)
   return true
 end
 
-function MetricsReporter:getPayload()
+function M:getPayload()
   -- take
   local bucket = {
     start = self.bucket.start,
@@ -232,7 +240,7 @@ function MetricsReporter:getPayload()
   }
 end
 
-function MetricsReporter:calculateNextRetryDelay()
+function M:calculateNextRetryDelay()
   if self.backoffs >= 10 then
     return 0 -- No more retries
   end
@@ -245,4 +253,4 @@ function MetricsReporter:calculateNextRetryDelay()
   return delay
 end
 
-return MetricsReporter
+return M

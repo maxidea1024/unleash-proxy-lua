@@ -66,7 +66,7 @@ function Timer.SetTimeout(seconds, fn)
 end
 
 function Timer.SetInterval(seconds, fn)
-  local context
+  local context -- for capturing reference
   local function intervalFn()
     if not context or context.canceled then return end
 
