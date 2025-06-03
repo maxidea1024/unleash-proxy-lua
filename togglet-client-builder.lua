@@ -47,13 +47,9 @@ function M:Context(context)
   return self
 end
 
-function M:Bootstrap(bootstrap)
+function M:Bootstrap(bootstrap, bootstrapOverride)
   Validation.RequireTable(bootstrap, "bootstrap", "ToggletClientBuilder:Bootstrap")
   self.config.bootstrap = bootstrap
-  return self
-end
-
-function M:BootstrapOverride(override)
   self.config.bootstrapOverride = override or true
   return self
 end
@@ -231,22 +227,29 @@ function M:WatchToggle(featureName, callback)
   return self
 end
 
+function M:WatchToggleWithInitialState(featureName, callback)
+  -- TODO
+  return self
+end
+
 function M:Build()
   local config = self.config
 
-  if not config.offline then
-    if not config.url then
-      error("`url` is required when not in offline mode")
-    end
+-- client.New() 에서 체크하니까 여기서 할필요는 없어보임
 
-    if not config.clientKey then
-      error("`clientKey` is required when not in offline mode")
-    end
-  end
-
-  if config.offline and not config.bootstrap then
-    error("`bootstrap` data is required in offline mode")
-  end
+--  if not config.offline then
+--    if not config.url then
+--      error("`url` is required when not in offline mode")
+--    end
+--
+--    if not config.clientKey then
+--      error("`clientKey` is required when not in offline mode")
+--    end
+--  end
+--
+--  if config.offline and not config.bootstrap then
+--    error("`bootstrap` data is required in offline mode")
+--  end
 
   local ToggletClient = require("framework.3rdparty.togglet.togglet-client")
   return ToggletClient.New(config)
