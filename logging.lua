@@ -34,6 +34,7 @@ end
 
 local ConsoleSink = {}
 ConsoleSink.__index = ConsoleSink
+ConsoleSink.__name = "ConsoleSink"
 
 function ConsoleSink.New(minLevel, formatter)
   return setmetatable({
@@ -69,6 +70,7 @@ end
 
 local FunctionSink = {}
 FunctionSink.__index = FunctionSink
+FunctionSink.__name = "FunctionSink"
 
 function FunctionSink.New(callback, minLevel, formatter)
   return setmetatable({
@@ -104,6 +106,7 @@ end
 
 local Logger = {}
 Logger.__index = Logger
+Logger.__name = "Logger"
 
 function Logger.New(category, minLevel, sinks)
   return setmetatable({
@@ -163,6 +166,7 @@ function Logger:Fatal(msg, ...) self:Log(LogLevel.Fatal, msg, ...) end
 
 local LoggerFactory = {}
 LoggerFactory.__index = LoggerFactory
+LoggerFactory.__name = "LoggerFactory"
 
 function LoggerFactory.New(minLevel, sinks)
   return setmetatable({
@@ -177,6 +181,7 @@ end
 
 local DefaultLoggerFactory = {}
 DefaultLoggerFactory.__index = DefaultLoggerFactory
+DefaultLoggerFactory.__name = "DefaultLoggerFactory"
 
 function DefaultLoggerFactory.New(minLevel)
   local function printCallback(time, level, category, line)
@@ -198,6 +203,7 @@ end
 
 local SilentLoggerFactory = {}
 SilentLoggerFactory.__index = SilentLoggerFactory
+SilentLoggerFactory.__name = "SilentLoggerFactory"
 
 function SilentLoggerFactory.New(minLevel)
   return setmetatable({

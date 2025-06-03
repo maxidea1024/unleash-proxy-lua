@@ -10,12 +10,14 @@ function M.New(client)
 end
 
 function M:WatchToggle(featureName, callback)
-  table.insert(self.unregisters, self.client:WatchToggle(featureName, callback))
+  local unregister = self.client:WatchToggle(featureName, callback)
+  table.insert(self.unregisters, unregister)
   return self
 end
 
 function M:WatchToggleWithInitialState(featureName, callback)
-  table.insert(self.unregisters, self.client:WatchToggleWithInitialState(featureName, callback))
+  local unregister = self.client:WatchToggleWithInitialState(featureName, callback)
+  table.insert(self.unregisters, unregister)
   return self
 end
 
