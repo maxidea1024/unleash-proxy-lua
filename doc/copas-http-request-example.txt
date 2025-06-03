@@ -1,0 +1,38 @@
+local copas = require("copas")
+local http = require("copas.http")
+local ltn12 = require("ltn12")
+
+local thread
+
+thread = copas.addthread(function()
+  local reqbody = "isThisAGreatExample=true"
+  local respbody = {}
+
+  local ok, code, headers, status = http.request {
+    method = "POST",
+    url = "https://httpbin.org/post",
+    source = ltn12.source.string(reqbody),
+    headers = {
+      ["Accept"] = "*/*",
+      ["Content-Type"] = "application/x-www-form-urlencoded",
+      ["Content-Length"] = tostring(#reqbody)
+    },
+    sink = ltn12.sink.table(respbody)
+  }
+
+  if ok then
+    print("Response code:", code)
+    print("Response body:", table.concat(respbody))
+  else
+    print("Request failed")
+  end
+end)
+
+-- 일정 시간 후 코루틴 제거 (예: 1초 후)
+copas.addthread(function()
+  copas.sleep(1)
+  copas.removethread(thread)
+  print("HTTP 요청이 취소되었습니다.")
+end)
+
+copas.loop()
