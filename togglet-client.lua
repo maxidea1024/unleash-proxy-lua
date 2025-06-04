@@ -13,7 +13,7 @@ local Events = require("framework.3rdparty.togglet.events")
 local ErrorTypes = require("framework.3rdparty.togglet.error-types")
 local ToggleProxy = require("framework.3rdparty.togglet.toggle-proxy")
 local ErrorHelper = require("framework.3rdparty.togglet.error-helper")
-local SdkVersion = require("framework.3rdparty.togglet.sdk-version")
+local Version = require("framework.3rdparty.togglet.version")
 local Validation = require("framework.3rdparty.togglet.validation")
 local Promise = require("framework.3rdparty.togglet.promise")
 local WatchToggleGroup = require("framework.3rdparty.togglet.watch-toggle-group")
@@ -102,7 +102,7 @@ function M.New(config)
   end
 
   self.appName = config.appName
-  self.sdkName = SdkVersion
+  self.sdkName = Version
   self.connectionId = Util.UuidV4()
   self.bootstrap = config.bootstrap
   self.bootstrapOverride = config.bootstrapOverride ~= false
@@ -472,7 +472,7 @@ function M:JsonVariation(featureName, defaultValue, forceSelectRealtimeToggle)
 end
 
 function M:Variation(featureName, defaultVariantName, forceSelectRealtimeToggle)
-  return self:GetVariant(featureName, forceSelectRealtimeToggle):Varation(defaultVariantName)
+  return self:GetToggle(featureName, forceSelectRealtimeToggle):Varation(defaultVariantName)
 end
 
 function M:selectTogglesMap(forceSelectRealtimeToggle)
