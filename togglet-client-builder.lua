@@ -1,56 +1,59 @@
-local Validation = require("framework.3rdparty.togglet.validation")
-local Logging = require("framework.3rdparty.togglet.logging")
+-- ToggleClient.New() 함수에 전달할 값들을 채우기 위한 용도이지 Validation은 하지 않는다.
+-- ToggleClient.New() 함수에서 Validation을 하기 때문
+
+-- local Validation = require("framework.3rdparty.togglet.validation")
+-- local Logging = require("framework.3rdparty.togglet.logging")
+
+local FileStorageProvider = require("framework.3rdparty.togglet.storage-provider-file")
+local InMemoryStorageProvider = require("framework.3rdparty.togglet.storage-provider-inmemory")
 
 local M = {}
 M.__index = M
 M.__name = "ToggletClientBuilder"
 
-function M.New(appName)
-  Validation.RequireString(appName, "appName", "ToggletClientBuilder.New")
-
+function M.New()
   local self = setmetatable({}, M)
 
   self.config = {
-    appName = appName
+    appName = "togglet-lua-client"
   }
 
   return self
 end
 
+function M:AppName(appName)
+  self.config.appName = appName
+  return self
+end
+
 function M:Url(url)
-  Validation.RequireString(url, "url", "ToggletClientBuilder:Url")
   self.config.url = url
   return self
 end
 
 function M:ClientKey(clientKey)
-  Validation.RequireString(clientKey, "clientKey", "ToggletClientBuilder:ClientKey")
   self.config.clientKey = clientKey
   return self
 end
 
 function M:Request(requestFn)
-  Validation.RequireFunction(requestFn, "requestFn", "ToggletClientBuilder:Request")
   self.config.request = requestFn
   return self
 end
 
 function M:Environment(environment)
-  Validation.RequireString(environment, "environment", "ToggletClientBuilder:Environment")
   self.config.environment = environment
   return self
 end
 
 function M:Context(context)
-  Validation.RequireTable(context, "context", "ToggletClientBuilder:Context")
   self.config.context = context
   return self
 end
 
 function M:Bootstrap(bootstrap, bootstrapOverride)
-  Validation.RequireTable(bootstrap, "bootstrap", "ToggletClientBuilder:Bootstrap")
   self.config.bootstrap = bootstrap
-  self.config.bootstrapOverride = override or true
+  self.config.bootstrapOverride = bootstrapOverride or true
   return self
 end
 
@@ -60,7 +63,7 @@ function M:Offline(offline)
 end
 
 function M:DevMode(devMode)
-  self.config.enableDevMode = devMode or true
+  self.config.devMode = devMode or true
   return self
 end
 
@@ -70,12 +73,11 @@ function M:DisableAutoStart(disable)
 end
 
 function M:ExplicitSyncMode(explicitSync)
-  self.config.useExplicitSyncMode = explicitSync or true
+  self.config.explicitSyncMode = explicitSync or true
   return self
 end
 
 function M:RefreshInterval(interval)
-  Validation.RequireNumber(interval, "interval", "ToggletClientBuilder:RefreshInterval", 0, 180)
   self.config.refreshInterval = interval
   return self
 end
@@ -85,51 +87,19 @@ function M:DisableRefresh(disable)
   return self
 end
 
+function M:MetricsInterval(interval, initialDelay)
+  self.config.metricsInterval = interval
+  self.config.metricsIntervalInitial = interval
+  return self
+end
+
 function M:DisableMetrics(disable)
   self.config.disableMetrics = disable or true
   return self
 end
 
-function M:MetricsIntervalInitial(interval)
-  Validation.RequireNumber(interval, "interval", "ToggletClientBuilder:MetricsIntervalInitial", 0, 180)
-  self.config.metricsIntervalInitial = interval
-  return self
-end
-
-function M:MetricsInterval(interval)
-  Validation.RequireNumber(interval, "interval", "ToggletClientBuilder:MetricsInterval", 0, 300)
-  self.config.metricsInterval = interval
-  return self
-end
-
 function M:ImpressionDataAll(enable)
   self.config.impressionDataAll = enable or true
-  return self
-end
-
--- TODO 로깅시스템 개편과 더불어 수정해줘야함
-function M:LoggerFactory(loggerFactory)
-  self.config.loggerFactory = loggerFactory
-  return self
-end
-
--- TODO 로깅시스템 개편과 더불어 수정해줘야함
-function M:LogLevel(logLevel)
-  local level = Logging.LogLevel[logLevel:gsub("^%l", string.upper)]
-  if not level then
-    error("Invalid log level: " .. tostring(logLevel))
-  end
-
-  if not self.config.loggerFactory then
-    self.config.loggerFactory = Logging.DefaultLoggerFactory.New(level)
-  end
-
-  return self
-end
-
--- TODO 외부로 노출하는게 바람직할까?
-function M:StorageProvider(storageProvider)
-  self.config.storageProvider = storageProvider
   return self
 end
 
@@ -144,13 +114,11 @@ function M:Backoff(min, max, factor, jitter)
 end
 
 function M:HeaderName(headerName)
-  Validation.RequireString(headerName, "headerName", "ToggletClientBuilder:HeaderName")
   self.config.headerName = headerName
   return self
 end
 
 function M:CustomHeaders(headers)
-  Validation.RequireTable(headers, "headers", "ToggletClientBuilder:CustomHeaders")
   self.config.customHeaders = headers
   return self
 end
@@ -161,14 +129,11 @@ function M:UsePOSTRequests(usePOST)
 end
 
 function M:Experimental(experimental)
-  Validation.RequireTable(experimental, "experimental", "ToggletClientBuilder:Experimental")
   self.config.experimental = experimental
   return self
 end
 
 function M:TogglesStorageTTL(ttl)
-  Validation.RequireNumber(ttl, "ttl", "ToggletClientBuilder:TogglesStorageTTL", 0, 3600)
-
   if not self.config.experimental then
     self.config.experimental = {}
   end
@@ -223,36 +188,62 @@ function M:OnSent(callback)
 end
 
 function M:WatchToggle(featureName, callback)
-  -- TODO
+  if not self.watchToggles then
+    self.watchToggles = {
+      {
+        featureName = featureName,
+        callback = callback
+      }
+    }
+  else
+    table.insert(self.watchToggles, {
+      featureName = featureName,
+      callback = callback
+    })
+  end
   return self
 end
 
 function M:WatchToggleWithInitialState(featureName, callback)
-  -- TODO
+  if not self.watchToggleWithInitialStates then
+    self.watchToggleWithInitialStates = {
+      {
+        featureName = featureName,
+        callback = callback
+      }
+    }
+  else
+    table.insert(self.watchToggleWithInitialStates, {
+      featureName = featureName,
+      callback = callback
+    })
+  end
+  return self
+end
+
+function M:UseFileStorage(backupPath, backupPrefix)
+  self.config.storageProvider = FileStorageProvider.New(backupPath, backupPrefix)
+  return self
+end
+
+function M:UseInMemoryStorage()
+  self.config.storageProvider = InMemoryStorageProvider.New()
+  return self
+end
+
+function M:LogSinks(sinks)
+  self.config.logSinks = sinks
+  return self
+end
+
+function M:LogLevel(logLevel)
+  self.config.logLevel = logLevel
   return self
 end
 
 function M:Build()
-  local config = self.config
-
--- client.New() 에서 체크하니까 여기서 할필요는 없어보임
-
---  if not config.offline then
---    if not config.url then
---      error("`url` is required when not in offline mode")
---    end
---
---    if not config.clientKey then
---      error("`clientKey` is required when not in offline mode")
---    end
---  end
---
---  if config.offline and not config.bootstrap then
---    error("`bootstrap` data is required in offline mode")
---  end
-
   local ToggletClient = require("framework.3rdparty.togglet.togglet-client")
-  return ToggletClient.New(config)
+  return ToggletClient.New(self.config)
 end
 
 return M

@@ -2,7 +2,7 @@
 
 -- Port of https://github.com/rhysbrettbowen/promise_impl/blob/master/promise.js
 -- and https://github.com/rhysbrettbowen/Aplus
---
+
 local queue = {}
 
 local State = {
@@ -52,8 +52,8 @@ transition = function(promise, state, value)
   if promise.state == state
       or promise.state ~= State.PENDING
       or (state ~= State.FULFILLED and state ~= State.REJECTED)
-      -- value가 nil일 경우에도 상태 전환이 일어나도록 주석 처리
-      -- or value == nil
+  -- value가 nil일 경우에도 상태 전환이 일어나도록 주석 처리
+  -- or value == nil
   then
     return
   end
@@ -196,22 +196,12 @@ end
 
 function Promise:Resolve(value)
   fulfill(self, value)
+  return self
 end
 
 function Promise:Reject(reason)
   reject(self, reason)
-end
-
-function Promise.Update()
-  while true do
-    local async = table.remove(queue, 1)
-
-    if not async then
-      break
-    end
-
-    async()
-  end
+  return self
 end
 
 -- resolve when all promises complete
@@ -282,6 +272,13 @@ end
 
 function Promise.FromError(error)
   return Promise.New():Reject(error)
+end
+
+function Promise.Update()
+  while #queue > 0 do
+    local async = table.remove(queue, 1)
+    async()
+  end
 end
 
 return Promise

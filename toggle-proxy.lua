@@ -39,9 +39,9 @@ local function validatePayload(self, expectedType, defaultValue)
 end
 
 function M.New(client, featureName, variant)
-  Validation.RequireValue(client, "client", "M.New")
-  Validation.RequireName(featureName, "featureName", "M.New")
-  Validation.RequireTable(variant, "variant", "M.New")
+  Validation.RequireValue(client, "client", "ToggleProxy.New")
+  Validation.RequireName(featureName, "featureName", "ToggleProxy.New")
+  Validation.RequireTable(variant, "variant", "ToggleProxy.New")
 
   local self = setmetatable({}, M)
   self.client = client
@@ -67,13 +67,13 @@ function M:IsEnabled()
 end
 
 function M:BoolVariation(defaultValue)
-  Validation.RequireBoolean(defaultValue, "defaultValue", "BoolVariation")
+  Validation.RequireBoolean(defaultValue, "defaultValue", "ToggleProxy:BoolVariation")
 
   return self.variant.feature_enabled or defaultValue
 end
 
 function M:NumberVariation(defaultValue, min, max)
-  Validation.RequireNumber(defaultValue, "defaultValue", "NumberVariation")
+  Validation.RequireNumber(defaultValue, "defaultValue", "ToggleProxy:NumberVariation")
 
   local isPayloadValid, payloadValue = validatePayload(self, "number", defaultValue)
   if not isPayloadValid then
@@ -111,7 +111,7 @@ function M:NumberVariation(defaultValue, min, max)
 end
 
 function M:StringVariation(defaultValue)
-  Validation.RequireString(defaultValue, "defaultValue", "StringVariation", true) -- allow empty
+  Validation.RequireString(defaultValue, "defaultValue", "ToggleProxy:StringVariation", true) -- allow empty
 
   local isPayloadValid, payloadValue = validatePayload(self, "string", defaultValue)
   if not isPayloadValid then
@@ -127,7 +127,7 @@ function M:StringVariation(defaultValue)
 end
 
 function M:JsonVariation(defaultValue)
-  Validation.RequireTable(defaultValue, "defaultValue", "JsonVariation")
+  Validation.RequireTable(defaultValue, "defaultValue", "ToggleProxy:JsonVariation")
 
   local isPayloadValid, payloadValue = validatePayload(self, "json", defaultValue)
   if not isPayloadValid then

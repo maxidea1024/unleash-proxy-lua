@@ -3,7 +3,6 @@ local Timer = {}
 local timers = {}
 local nextTimerId = 1
 local MAX_TIMER_ID = 2 ^ 30
-
 local co_pool = setmetatable({}, { __mode = "kv" })
 local MAX_POOL_SIZE = 100
 
@@ -101,6 +100,7 @@ function Timer.NextTick(fn)
     logError("Timer.NextTick requires a function argument")
     return nil
   end
+
   return insertTimer(0, fn)
 end
 
@@ -109,10 +109,12 @@ function Timer.SetTimeout(seconds, fn)
     logError("Timer.SetTimeout requires a function argument")
     return nil
   end
+
   if type(seconds) ~= "number" or seconds < 0 then
     logError("Timer.SetTimeout requires a non-negative number as first argument")
     return nil
   end
+
   return insertTimer(seconds, fn)
 end
 
@@ -121,6 +123,7 @@ function Timer.SetInterval(seconds, fn)
     logError("Timer.SetInterval requires a function argument")
     return nil
   end
+
   if type(seconds) ~= "number" or seconds < 0 then
     logError("Timer.SetInterval requires a non-negative number as first argument")
     return nil

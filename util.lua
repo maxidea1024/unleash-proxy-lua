@@ -2,16 +2,28 @@ local json = require("framework.3rdparty.togglet.dkjson")
 local sha2 = require("framework.3rdparty.togglet.sha2")
 
 local function UrlEncode(str)
-  if str then
-    str = string.gsub(str, "([^%w ])", function(c) return string.format("%%%02X", string.byte(c)) end)
-    str = string.gsub(str, " ", "+")
+  if str == nil then
+    return ""
   end
+  str = tostring(str)
+  str = str:gsub("\n", "\r\n")
+  str = str:gsub("([^%w%-_%.~])",   -- RFC 3986 safe characters
+    function(c)
+      return string.format("%%%02X", string.byte(c))
+    end
+  )
   return str
 end
 
 local function UrlDecode(str)
-  str = string.gsub(str, "+", " ")
-  str = string.gsub(str, "%%(%x%x)", function(h) return string.char(tonumber(h, 16)) end)
+  if str == nil then
+    return ""
+  end
+  str = tostring(str)
+  str = str:gsub("%%(%x%x)", function(hex)
+    return string.char(tonumber(hex, 16))
+  end)
+  str = str:gsub("\r\n", "\n")
   return str
 end
 
@@ -334,6 +346,24 @@ local function MergeArrays(...)
   return result
 end
 
+local GenerateRandomName = function(prefix, length)
+  local chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+  local numChars = "0123456789"
+  local result = prefix or ""
+
+  -- First character must be a letter
+  local rand = math.random(1, #chars)
+  result = result .. chars:sub(rand, rand)
+
+  -- Rest can be letters or numbers
+  local allChars = chars .. numChars
+  for i = 2, (length or 10) do
+    rand = math.random(1, #allChars)
+    result = result .. allChars:sub(rand, rand)
+  end
+  return result
+end
+
 return {
   UrlWithContextAsQuery = UrlWithContextAsQuery,
   ComputeContextHashValue = ComputeContextHashValue,
@@ -350,6 +380,7 @@ return {
   PathJoin = PathJoin,
   GetTempDir = GetTempDir,
   UrlEncode = UrlEncode,
+  GenerateRandomName = GenerateRandomName,
   UrlDecode = UrlDecode,
   ToJson = ToJson,
   FromJson = FromJson,

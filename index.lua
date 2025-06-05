@@ -16,8 +16,4 @@ return {
   Events = Events,
   Logging = Logging,
   Util = Util,
-  UpdateTogglet = function()
-    Timer.Update()
-    Promise.Update()
-  end,
 }

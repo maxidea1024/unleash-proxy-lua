@@ -1,5 +1,17 @@
 -- TODO 로깅 정리(단순화, 현재는 지나치게 복잡함)
--- FIXME fetch 중 timeout이 30초로 되어 있어서, 반응이 없을 경우 30초동안 대기하는 상황이 발생한다.
+
+-- FIXME
+--   fetch 중 timeout이 30초로 되어 있어서, 반응이 없을 경우 30초동안 대기하는 상황이 발생한다.
+
+-- FIXME
+--   disable 된 플래그는 조회가 안되므로, impressionData로 설정해놔도
+--   항상 false로 인식된다.
+--   해결방법은 impressionDataAll=true로 해놓는건데, 그렇게 되면
+--   Unleash dashboard에서 impressionData=false로 설정해놓은게 무의미해진다.
+--   frontend sdk 에서는 무조건 impression event를 추적할수 밖에 없을듯한데?
+--   아니면 전체 플래그 목록과 impressionData가 true/false인지 알아야한다.
+--   Unleash frontend api에서 내려받는 형태를 바꾸는게 맞을듯하다.
+--   추가적으로 이 문제점으로 인해서 boolVariation 함수에 defaultValue를 지정할수 없다.
 
 local Json = require("framework.3rdparty.togglet.dkjson")
 local Timer = require("framework.3rdparty.togglet.timer")
@@ -75,33 +87,43 @@ local function convertTogglesArrayToMap(togglesArray)
   return togglesMap
 end
 
-------------------------------------------------------------------
+------------------------------------------------------------------------------
 -- ToggletClient implementation
-------------------------------------------------------------------
+------------------------------------------------------------------------------
 
 local M = {}
 M.__index = M
 M.__name = "ToggletClient"
 
 function M.New(config)
-  Validation.RequireTable(config, "config", "ToggletClient.New")
-
   local self = setmetatable({}, M)
 
-  self.loggerFactory = config.loggerFactory or Logging.DefaultLoggerFactory.New(Logging.LogLevel.Log)
+  Validation.RequireTable(config, "config", "ToggletClient.New")
+
+  if config.logLevel then
+    config.logLevel = Logging.LogLevel[config.logLevel:gsub("^%l", string.upper)]
+    if not config.logLevel then
+      error("Invalid log level: " .. tostring(config.logLevel))
+    end
+  end
+
+  -- 설정에 맞춰서 생성해줘야함.
+  -- sinks
+  self.loggerFactory = Logging.DefaultLoggerFactory.New(Logging.LogLevel.Debug)
+
   self.logger = self.loggerFactory:CreateLogger("Togglet")
-  self.devMode = config.enableDevMode or false
+  self.devMode = config.devMode or false
   self.offline = config.offline or false
 
-  Validation.RequireField(config, "appName", "config", "ToggletClient.New")
-
   if not self.offline then
+    Validation.RequireField(config, "appName", "config", "ToggletClient.New")
     Validation.RequireField(config, "url", "config", "ToggletClient.New")
     Validation.RequireField(config, "request", "config", "ToggletClient.New")
     Validation.RequireField(config, "clientKey", "config", "ToggletClient.New")
   end
 
   self.appName = config.appName
+  self.environment = config.environment or "default"
   self.sdkName = Version
   self.connectionId = Util.UuidV4()
   self.bootstrap = config.bootstrap
@@ -115,15 +137,22 @@ function M.New(config)
   self.sdkState = "initializing"
 
   self.realtimeTogglesMap = convertTogglesArrayToMap(config.bootstrap or {})
-  self.useExplicitSyncMode = config.useExplicitSyncMode or false
+  self.explicitSyncMode = config.explicitSyncMode or false
   self.synchronizedTogglesMap = Util.Clone(self.realtimeTogglesMap)
   self.lastSynchronizedETag = nil
 
   self.context = {
+    -- static context fields
+    appName = self.appName,
+    environment = self.environment,
+
+    -- defined context fields
     userId = config.context and config.context.userId,
     sessionId = config.context and config.context.sessionId,
     remoteAddress = config.context and config.context.remoteAddress,
     currentTime = config.context and config.context.currentTime,
+
+    -- user context fields
     properties = config.context and config.context.properties,
   }
   self.contextVersion = 1
@@ -144,20 +173,21 @@ function M.New(config)
   self.request = config.request
   self.usePOSTrequests = config.usePOSTrequests or false
   self.refreshInterval = (self.offline and 0) or (config.disableRefresh and 0) or (config.refreshInterval or 15)
-
+  self.fetchFailures = 0
+  self.fetchingContext = nil
+  self.fetchingContextVersion = self.contextVersion
+  self.fetching = false
   self.backoffParams = {
     min = config.backoff and config.backoff.min or 1,
     max = config.backoff and config.backoff.max or 10,
     factor = config.backoff and config.backoff.factor or 2,
     jitter = config.backoff and config.backoff.jitter or 0.2
   }
-  self.fetchFailures = 0
-  self.fetchingContext = nil
-  self.fetchingContextVersion = self.contextVersion
-  self.fetching = false
 
   local metricsDisabled = self.offline or (config.disableMetrics or false)
-  if not metricsDisabled then
+  if metricsDisabled then
+    self.metricsReporter = MetricsReporterNoop.New()
+  else
     self.metricsReporter = MetricsReporter.New({
       client = self,
       connectionId = self.connectionId,
@@ -173,13 +203,13 @@ function M.New(config)
       onSent = function(data) self:emit(Events.SENT, data) end,
       loggerFactory = self.loggerFactory,
     })
-  else
-    self.metricsReporter = MetricsReporterNoop.New()
   end
 
   self:registerEventHandlers(config)
 
-  self:summarizeConfiguration()
+  if self.devMode then
+    self:summarizeConfiguration()
+  end
 
   if not config.disableAutoStart then
     self:Start()
@@ -214,30 +244,47 @@ function M:registerEventHandlers(config)
       self:On(Events.SENT, callback)
     end
   end
+
+  if config.watchToggles then
+    for _, watchToggle in ipairs(config.watchToggles) do
+      self:WatchToggle(watchToggle.featureName, watchToggle.callback)
+    end
+  end
+  if config.watchToggleWithInitialStates then
+    for _, watchToggleWithInitialState in ipairs(config.watchToggleWithInitialStates) do
+      self:WatchToggleWithInitialState(watchToggleWithInitialState.featureName,
+        watchToggleWithInitialState.callback)
+    end
+  end
+
+  -- -- debugging 용 핸들러 추가
+  -- if self.devMode then
+  --   if not self.eventEmitter:HasListeners(Events.IMPRESSION) then
+  --     self:On(Events.IMPRESSION, function(event)
+  --       self.logger:Debug("[DEBUG] IMPRESSION: %s", Json.encode(event))
+  --     end)
+  --   end
+  -- end
 end
 
 function M:summarizeConfiguration()
-  if self.devMode then
-    local summary = {
-      appName = self.appName,
-      environment = self.environment,
-      sdkName = self.sdkName,
-      connectionId = self.connectionId,
-      offline = self.offline,
-      devMode = self.devMode,
-      explicitSyncMode = self.useExplicitSyncMode,
-      dataFetchMode = self.refreshInterval > 0 and "polling" or "manual",
-      url = self.url,
-    }
+  local summary = {
+    appName = self.appName,
+    environment = self.environment,
+    sdkName = self.sdkName,
+    connectionId = self.connectionId,
+    offline = self.offline,
+    devMode = self.devMode,
+    explicitSyncMode = self.explicitSyncMode,
+    dataFetchMode = self.refreshInterval > 0 and "polling" or "manual",
+    url = self.url,
+  }
 
-    if self.refreshInterval > 0 then
-      summary.refreshInterval = string.format("%.2f sec", self.refreshInterval)
-    end
-
-    self.logger:Info("ℹ️ Create ToggletClient instance with configuration=%s", Json.encode(summary))
-  else
-    self.logger:Info("ℹ️ Create ToggletClient instance")
+  if self.refreshInterval > 0 then
+    summary.refreshInterval = string.format("%.2f sec", self.refreshInterval)
   end
+
+  self.logger:Info("ℹ️ Create ToggletClient instance with configuration=%s", Json.encode(summary))
 end
 
 function M:Start()
@@ -255,14 +302,14 @@ function M:Start()
   self.started = true
 
   -- Load local cache -> Initial fetch toggles
-  return self:loadBackup()
+  return self:tryLoadLocalCache()
       :Next(function()
         return self:initialFetchToggles()
             :Next(function()
               self.logger:Debug("✅ Starting metrics reporter")
               self.metricsReporter:Start()
 
-              self.logger:Info("🌀 ToggletClient started")
+              self.logger:Info("🌀 ToggletClient is started")
             end)
       end)
       :Catch(function(err)
@@ -289,7 +336,7 @@ function M:Start()
       end)
 end
 
-function M:loadBackup()
+function M:tryLoadLocalCache()
   self.logger:Debug("🔄 Try loading local cache...")
 
   return self:resolveSessionId()
@@ -361,7 +408,6 @@ function M:setReady()
   self:emit(Events.READY)
 end
 
--- timeout처리를 해야할까?
 function M:WaitUntilReady()
   if self.offline or self.readyEventEmitted then
     return Promise.Completed()
@@ -376,7 +422,6 @@ end
 
 function M:GetAllToggles(forceSelectRealtimeToggle)
   local togglesMap = self:selectTogglesMap(forceSelectRealtimeToggle)
-
   local result = {}
   for _, toggle in pairs(togglesMap) do
     table.insert(result, {
@@ -394,7 +439,7 @@ function M:IsEnabled(featureName, forceSelectRealtimeToggle)
 
   local togglesMap = self:selectTogglesMap(forceSelectRealtimeToggle)
   local toggle = togglesMap[featureName]
-  local enabled = (toggle and toggle.enabled) or false
+  local enabled = toggle and toggle.enabled or false
 
   if not self.offline then
     self.metricsReporter:Count(featureName, enabled)
@@ -402,7 +447,7 @@ function M:IsEnabled(featureName, forceSelectRealtimeToggle)
     local impressionData = self.impressionDataAll or (toggle and toggle.impressionData)
     if impressionData then
       local event = createImpressionEvent(
-        self:contextWithAppName(),
+        self.context,
         enabled,
         featureName,
         IMPRESSION_EVENTS.IS_ENABLED,
@@ -421,8 +466,8 @@ function M:GetVariant(featureName, forceSelectRealtimeToggle)
 
   local togglesMap = self:selectTogglesMap(forceSelectRealtimeToggle)
   local toggle = togglesMap[featureName]
-  local enabled = (toggle and toggle.enabled) or false
-  local variant = (toggle and toggle.variant) or DEFAULT_DISABLED_VARIANT
+  local enabled = toggle and toggle.enabled or false
+  local variant = toggle and toggle.variant or DEFAULT_DISABLED_VARIANT
 
   if not self.offline then
     self.metricsReporter:CountVariant(featureName, variant.name)
@@ -431,7 +476,7 @@ function M:GetVariant(featureName, forceSelectRealtimeToggle)
     local impressionData = self.impressionDataAll or (toggle and toggle.impressionData)
     if impressionData then
       local event = createImpressionEvent(
-        self:contextWithAppName(),
+        self.context,
         enabled,
         featureName,
         IMPRESSION_EVENTS.GET_VARIANT,
@@ -480,11 +525,11 @@ function M:selectTogglesMap(forceSelectRealtimeToggle)
     return self.realtimeTogglesMap
   end
 
-  return self.useExplicitSyncMode and self.synchronizedTogglesMap or self.realtimeTogglesMap
+  return self.explicitSyncMode and self.synchronizedTogglesMap or self.realtimeTogglesMap
 end
 
 function M:SyncToggles(fetchNow)
-  if self.offline or not self.useExplicitSyncMode then
+  if self.offline or not self.explicitSyncMode then
     return Promise.Completed()
   end
 
@@ -525,10 +570,21 @@ function M:WatchToggle(featureName, callback)
 end
 
 function M:WatchToggleWithInitialState(featureName, callback)
-  if self.offline then return function() end end
-
   Validation.RequireName(featureName, "featureName", "ToggletClient:WatchToggleWithInitialState")
   Validation.RequireFunction(callback, "callback", "ToggletClient:WatchToggleWithInitialState")
+
+  -- 초기화를 위해서 바로 call해줘야함!
+  if self.offline then
+    local toggle = self:GetToggle(featureName, true) -- realtime
+    self.logger:Debug("👀 WatchToggleWithInitialState: feature=`%s`, enabled=%s", featureName, toggle:IsEnabled())
+    -- 안전하게 호출할 방법이 필요하지 않을까?
+    if callback and type(callback) == "function" then
+      callback(toggle)
+    end
+
+    -- 오프라인에서 더이상의 처리는 의미 없다.
+    return
+  end
 
   local eventName = "update:" .. featureName
   self.eventEmitter:On(eventName, callback)
@@ -542,7 +598,8 @@ function M:WatchToggleWithInitialState(featureName, callback)
 
     self:Once(Events.READY, function()
       local toggle = self:GetToggle(featureName, true) -- realtime
-      self.logger:Debug("👀 WatchToggleWithInitialState(Pended): feature=`%s`, enabled=%s", featureName, toggle:IsEnabled())
+      self.logger:Debug("👀 WatchToggleWithInitialState(Pended): feature=`%s`, enabled=%s", featureName,
+        toggle:IsEnabled())
       self.eventEmitter:Emit(eventName, toggle)
     end)
   end
@@ -558,26 +615,52 @@ function M:UnwatchToggle(featureName, callback)
   Validation.RequireName(featureName, "featureName", "ToggletClient:UnwatchToggle")
   Validation.RequireFunction(callback, "callback", "ToggletClient:UnwatchToggle")
 
-  self.logger:Debug("UnwatchToggle: feature=`%s`")
+  self.logger:Debug("👀 UnwatchToggle: feature=`%s`", featureName)
 
   local eventName = "update:" .. featureName
   self.eventEmitter:Off(eventName, callback)
 end
 
-function ToggleClient:CreateWatchToggleGroup()
-  return WatchToggleGroup.New(self)
+--[[
+local watchToggleGroup = client:CreateWatchToggleGroup()
+  :WatchToggle("flag-1", function(toggle) end)
+  :WatchToggle("flag-2", function(toggle) end)
+  :WatchToggle("flag-3", function(toggle) end)
+  :WatchToggle("flag-4", function(toggle) end)
+  :WatchToggle("flag-5", function(toggle) end)
+
+watchToggleGroup:UnwatchAll()
+]]
+
+function M:CreateWatchToggleGroup(name)
+  name = name or Util.GenerateRandomName("WatchToggleGroup:")
+
+  if not self.watchToggleGroups then
+    self.watchToggleGroups = setmetatable({}, { __mode = "v" })
+  end
+
+  local group = WatchToggleGroup.New(self, name)
+  table.insert(self.watchToggleGroups, group)
+
+  self.logger:Debug("👀 CreateWatchToggleGroup: name=`%s`", name)
+  return group
 end
 
--- local watchToggleGroup = client:CreateWatchToggleGroup()
---
--- watchToggleGroup
---   :WatchToggle("flag-1", function(toggle) end)
---   :WatchToggle("flag-2", function(toggle) end)
---   :WatchToggle("flag-3", function(toggle) end)
---   :WatchToggle("flag-4", function(toggle) end)
---   :WatchToggle("flag-5", function(toggle) end)
---
--- watchToggleGroup:UnwatchAll()
+-- 개선:
+-- Stop()에서 호출할 경우, 다시 Start()를 호출하기 전에,
+-- 다시 WatchToggle* 을 호출해서 변화감지를 걸어줘야하는 번거로움이 있다.
+function M:destroyAllWatchToggleGroups()
+  if self.watchToggleGroups then
+    for _, group in ipairs(self.watchToggleGroups) do
+      if group then
+        self.logger:Debug("👀 DestroyWatchToggleGroup: name=`%s`", group.name)
+
+        group:UnwatchAll()
+      end
+    end
+    self.watchToggleGroups = nil
+  end
+end
 
 function M:UpdateToggles()
   if self.offline then
@@ -587,7 +670,9 @@ function M:UpdateToggles()
   if self.fetching then
     local promise = Promise.New()
     if self.fetchingContextVersion ~= self.contextVersion then
-      -- FIXME 요청을 계속 쌓아봐야 마지막만 의미가 있다. 마지막 요청만 인정하는 형태면 좋을듯하다. 개선의 여지가 있다.
+      -- FIXME
+      -- 요청을 계속 쌓아봐야 마지막만 의미가 있다.
+      -- 마지막 요청만 인정하는 형태면 좋을듯하다. 개선의 여지가 있다.
       self:Once(Events.FETCH_COMPLETED, function()
         self:UpdateToggles():Next(function()
           promise:Resolve()
@@ -625,8 +710,14 @@ end
 function M:updateContextField(field, value)
   Validation.RequireName(field, "field", "ToggletClient:updateContextField")
 
+  -- FIXME number, string, bool, nil 만 허용해야함.
+  -- userdata 대응
+  if type(value) == "userdata" then
+    value = tostring(value)
+  end
+
   if STATIC_CONTEXT_FIELDS[field] then
-    self.logger:Warn("🧩 `%s` is a static field. It can't be updated with M:updateContextField.", field)
+    self.logger:Warn("🧩 `%s` is a static field. It can't be updated with ToggletClient:updateContextField.", field)
     return false
   end
 
@@ -636,7 +727,6 @@ function M:updateContextField(field, value)
     if value == self.context[field] then return false end
 
     self.context[field] = value
-    self.contextVersion = self.contextVersion + 1
   else
     if not self.context.properties then
       self.context.properties = {}
@@ -645,7 +735,6 @@ function M:updateContextField(field, value)
     end
 
     self.context.properties[field] = value
-    self.contextVersion = self.contextVersion + 1
   end
 
   return true
@@ -659,7 +748,11 @@ function M:updateContextFields(fields)
     end
   end
 
-  return changeds > 0
+  return changeds
+end
+
+function M:advanceContextVersion()
+  self.contextVersion = self.contextVersion + 1
 end
 
 function M:SetContextFields(fields)
@@ -668,11 +761,15 @@ function M:SetContextFields(fields)
   end
 
   local changeds = self:updateContextFields(fields);
-  if self.readyEventEmitted and changeds > 0 then
-    return self:UpdateToggles()
-  else
-    return Promise.Completed()
+  if changeds > 0 then
+    self:advanceContextVersion()
+
+    if self.readyEventEmitted then
+      return self:UpdateToggles()
+    end
   end
+
+  return Promise.Completed()
 end
 
 function M:SetContextField(field, value)
@@ -681,11 +778,15 @@ function M:SetContextField(field, value)
   end
 
   local changed = self:updateContextField(field, value)
-  if self.readyEventEmitted and changed then
-    return self:UpdateToggles()
-  else
-    return Promise.Completed()
+  if changed then
+    self:advanceContextVersion()
+
+    if self.readyEventEmitted then
+      return self:UpdateToggles()
+    end
   end
+
+  return Promise.Completed()
 end
 
 function M:RemoveContextField(field)
@@ -699,15 +800,15 @@ function M:RemoveContextField(field)
     end
 
     self.context[field] = nil
-    self.contextVersion = self.contextVersion + 1
   elseif self.context.properties and type(self.context.properties) == "table" then
     if not self.context.properties[field] then
       return Promise.Completed()
     end
 
     table.remove(self.context.properties, field)
-    self.contextVersion = self.contextVersion + 1
   end
+
+  self:advanceContextVersion()
 
   if self.readyEventEmitted then
     return self:UpdateToggles()
@@ -855,9 +956,8 @@ function M:Stop()
   end
 
   self.metricsReporter:Stop()
-
   self:cancelFetchTimer()
-
+  self:destroyAllWatchToggleGroups()
   self.started = false
 
   self.logger:Info("⏹️ ToggletClient is stopped.")
@@ -870,7 +970,7 @@ function M:IsReady()
 end
 
 function M:GetError()
-  return (self.sdkState == 'error' and self.lastError) or nil
+  return self.sdkState == 'error' and self.lastError or nil
 end
 
 function M:SendMetrics()
@@ -888,7 +988,7 @@ function M:resolveSessionId()
     end
 
     sessionId = tostring(math.random(1, 1000000000))
-    return self.storage:Save(SESSION_ID_KEY, sessionId)
+    return self.storage:Store(SESSION_ID_KEY, sessionId)
   end)
 end
 
@@ -932,7 +1032,7 @@ function M:storeToggles(toggleArray)
 
   self.realtimeTogglesMap = newTogglesMap
 
-  if not self.useExplicitSyncMode then
+  if not self.explicitSyncMode then
     self:emit(Events.UPDATE, newTogglesArray)
   end
 
@@ -1017,7 +1117,7 @@ function M:storeLastRefreshTimestamp()
 end
 
 function M:initialFetchToggles()
-  self.logger:Info("🔄 Initial fetch toggles")
+  self.logger:Debug("🔄 Initial fetch toggles")
 
   if self:isUpToDate() then
     if not self.fetchedFromServer then
@@ -1035,43 +1135,13 @@ function M:initialFetchToggles()
   end)
 end
 
--- 이 함수는 제거하도록하자.
-function M:contextWithAppName()
-  local context = {
-    -- static context fields
-    appName = self.appName,
-    environment = self.environment,
-  }
-
-  -- predefined context fields
-  for field, _ in pairs(DEFINED_CONTEXT_FIELDS) do
-    local value = self.context[field]
-    if value ~= nil then
-      context[field] = value
-    end
-  end
-
-  -- custom properties
-  if self.context.properties then
-    context.properties = {}
-    for key, val in pairs(self.context.properties) do
-      context.properties[key] = val
-    end
-  end
-
-  return context
-end
-
+-- TODO 기존 요청을 취소할수 있는기능이 필요하다.
 function M:fetchToggles(retry)
   self.fetching = true
 
-  if retry then
-    self.logger:Debug("🔄 Fetching feature flags for Retry: contextVersion=" .. self.fetchingContextVersion)
-  else
-    self.logger:Debug("🔄 Fetching feature flags: contextVersion=" .. self.fetchingContextVersion)
-
+  if not retry then
     self.fetchingContextVersion = self.contextVersion
-    self.fetchingContext = self:contextWithAppName()
+    self.fetchingContext = Util.Clone(self.context)
   end
 
   local isPOST = self.usePOSTrequests
@@ -1079,21 +1149,18 @@ function M:fetchToggles(retry)
   local method = isPOST and "POST" or "GET"
   local headers = self:getHeaders()
 
+  if self.logger:IsEnabled(Logging.LogLevel.Debug) then
+    self.logger:Debug("🔄 Fetching feature flags%s: contextVersion=%s, url=\"%s\"",
+      retry and " for Retry" or "", self.fetchingContextVersion, url)
+  end
+
   -- Safely encode JSON for POST requests
+  local body = nil
   if isPOST then
     body = Json.encode({ context = self.fetchingContext })
     -- Note: When using the POST method, the Content-Length header must be set.
     headers["Content-Length"] = tostring(body and #body or 0)
   end
-
-  -- if self.logger:IsEnabled(Logging.LogLevel.Debug) then
-  --   local success, jsonUrl = pcall(Json.encode, Util.UrlDecode(url))
-  --   if success then
-  --     self.logger:Debug("🔄 Fetching feature flags: %s", jsonUrl)
-  --   else
-  --     self.logger:Debug("🔄 Fetching feature flags: %s [JSON encoding failed]", tostring(url))
-  --   end
-  -- end
 
   local promise = Promise.New()
   self.request(url, method, headers, body, function(response)
@@ -1102,7 +1169,7 @@ function M:fetchToggles(retry)
   return promise
 end
 
--- 재시도중에는 fetching이 true임.
+-- fetching remains true during retry attempts
 function M:handleFetchResponse(url, method, headers, body, response, promise)
   if response.status >= 200 and response.status <= 299 or response.status == 304 then
     self.fetching = false
@@ -1126,7 +1193,7 @@ function M:handleFetchResponse(url, method, headers, body, response, promise)
 
     self:processSuccessfulResponse(data, promise)
   elseif response.status == 304 then
-    self.logger:Debug("⚡ No changes, using cached data")
+    self.logger:Debug("🟰 No changes, using cached data")
 
     if not self.fetchedFromServer then
       self.fetchedFromServer = true

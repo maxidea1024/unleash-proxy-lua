@@ -12,11 +12,12 @@ local function removeEntry(t, pred)
   local i = 1
   while i <= #t do
     local trusy = false
-    if type(pred) == "function" then
-      trusy = pred(t[i])
-    else
+    -- CHECKME pred처리 의도를 확인해야함.
+    -- if type(pred) == "function" then
+    --   trusy = pred(t[i])
+    -- else
       trusy = t[i] == pred
-    end
+    -- end
 
     if trusy then
       table.remove(t, i)
