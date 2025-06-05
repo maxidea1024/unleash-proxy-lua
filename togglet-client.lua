@@ -100,20 +100,27 @@ function M.New(config)
 
   Validation.RequireTable(config, "config", "ToggletClient.New")
 
+  self.devMode = config.devMode or false
+  self.offline = config.offline or false
+
+  -- 주의: config.logFormatter는 아직 적용안됨.
+
+  local logLevel = self.devMode and Logging.LogLevel.Debug or Logging.LogLevel.Info
   if config.logLevel then
     config.logLevel = Logging.LogLevel[config.logLevel:gsub("^%l", string.upper)]
     if not config.logLevel then
       error("Invalid log level: " .. tostring(config.logLevel))
     end
+    logLevel = config.logLevel
   end
 
-  -- 설정에 맞춰서 생성해줘야함.
-  -- sinks
-  self.loggerFactory = Logging.DefaultLoggerFactory.New(Logging.LogLevel.Debug)
+  if config.logSinks then
+    self.loggerFactory = Logging.LoggerFactory.New(logLevel, config.logSinks)
+  else
+    self.loggerFactory = Logging.DefaultLoggerFactory.New(logLevel)
+  end
 
   self.logger = self.loggerFactory:CreateLogger("Togglet")
-  self.devMode = config.devMode or false
-  self.offline = config.offline or false
 
   if not self.offline then
     Validation.RequireField(config, "appName", "config", "ToggletClient.New")
@@ -166,7 +173,7 @@ function M.New(config)
   self.storage = config.storageProvider or InMemoryStorageProvider.New()
   self.impressionDataAll = config.impressionDataAll or false
 
-  self.url = type(config.url) == "string" and config.url or config.url
+  self.url = config.url
   self.clientKey = config.clientKey
   self.headerName = config.headerName or "Authorization"
   self.customHeaders = config.customHeaders or {}

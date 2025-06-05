@@ -241,6 +241,11 @@ function M:LogLevel(logLevel)
   return self
 end
 
+function M:LogFormatter(formatter)
+  self.config.logFormatter = formatter
+  return self
+end
+
 function M:Build()
   local ToggletClient = require("framework.3rdparty.togglet.togglet-client")
   return ToggletClient.New(self.config)
