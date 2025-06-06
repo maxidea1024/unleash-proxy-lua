@@ -87,6 +87,35 @@ local function convertTogglesArrayToMap(togglesArray)
   return togglesMap
 end
 
+local function normalizeContext(context)
+  local result = {}
+  for key, val in pairs(context) do
+    if val ~= nil and key ~= "properties" then
+      if type(val) == "userdata" then
+        result[key] = tostring(val)
+      else
+       -- TODO value 타입은 string, bool, number, nil 만 허용함
+        result[key] = val
+      end
+    end
+  end
+
+  if context.properties and type(context.properties) == "table" then
+    for key, val in pairs(context.properties) do
+      if val ~= nil then
+        if type(val) == "userdata" then
+          result[key] = tostring(val)
+        else
+          -- TODO value 타입은 string, bool, number, nil 만 허용함
+          result[key] = val
+        end
+      end
+    end
+  end
+
+  return result
+end
+
 ------------------------------------------------------------------------------
 -- ToggletClient implementation
 ------------------------------------------------------------------------------
@@ -105,7 +134,10 @@ function M.New(config)
 
   -- 주의: config.logFormatter는 아직 적용안됨.
 
+  -- devMode에서는 Debug, devMode가 아니면 Info 레벨을 기본으로 한다.
   local logLevel = self.devMode and Logging.LogLevel.Debug or Logging.LogLevel.Info
+
+  -- logLevel을 직접 지정한 경우에는 지정된것을 사용.
   if config.logLevel then
     config.logLevel = Logging.LogLevel[config.logLevel:gsub("^%l", string.upper)]
     if not config.logLevel then
@@ -114,6 +146,7 @@ function M.New(config)
     logLevel = config.logLevel
   end
 
+  -- logSinks가 지정된 경우에는 지정된것을 사용해서 loggerFactory를 생성후 사용.
   if config.logSinks then
     self.loggerFactory = Logging.LoggerFactory.New(logLevel, config.logSinks)
   else
@@ -125,19 +158,21 @@ function M.New(config)
   if not self.offlineMode then
     Validation.RequireField(config, "appName", "config", "ToggletClient.New")
     Validation.RequireField(config, "url", "config", "ToggletClient.New")
-    Validation.RequireField(config, "request", "config", "ToggletClient.New")
     Validation.RequireField(config, "clientKey", "config", "ToggletClient.New")
+    Validation.RequireField(config, "request", "config", "ToggletClient.New")
   end
 
   self.appName = config.appName
   self.environment = config.environment or "default"
   self.sdkName = Version
   self.connectionId = Util.UuidV4()
+
   self.bootstrap = config.bootstrap
   self.bootstrapOverride = config.bootstrapOverride ~= false
   self.experimental = Util.Clone(config.experimental or {})
   self.lastRefreshTimestamp = 0
   self.etag = nil
+
   self.readyEventEmitted = self.offlineMode == true
   self.fetchedFromServer = self.offlineMode == true
   self.started = self.offlineMode == true
@@ -148,20 +183,26 @@ function M.New(config)
   self.synchronizedTogglesMap = Util.Clone(self.realtimeTogglesMap)
   self.lastSynchronizedETag = nil
 
-  self.context = {
+  local context = {
     -- static context fields
     appName = self.appName,
     environment = self.environment,
-
-    -- defined context fields
-    userId = config.context and config.context.userId,
-    sessionId = config.context and config.context.sessionId,
-    remoteAddress = config.context and config.context.remoteAddress,
-    currentTime = config.context and config.context.currentTime,
-
-    -- user context fields
-    properties = config.context and config.context.properties,
   }
+  if config.context then
+    -- defined context fields
+    for field, _ in pairs(DEFINED_CONTEXT_FIELDS) do
+      if config.context[field] then
+        context[field] = config.context[field]
+      end
+    end
+
+    -- properties
+    if config.context.properties and type(config.context.properties) == "table" then
+      context.properties = config.context.properties
+    end
+  end
+
+  self.context = normalizeContext(context)
   self.contextVersion = 1
 
   self.eventEmitter = EventEmitter.New({
@@ -717,11 +758,11 @@ end
 function M:updateContextField(field, value)
   Validation.RequireName(field, "field", "ToggletClient:updateContextField")
 
-  -- FIXME number, string, bool, nil 만 허용해야함.
   -- userdata 대응
   if type(value) == "userdata" then
     value = tostring(value)
   end
+  -- TODO value 타입은 string, bool, number, nil 만 허용함
 
   if STATIC_CONTEXT_FIELDS[field] then
     self.logger:Warn("🧩 `%s` is a static field. It can't be updated with ToggletClient:updateContextField.", field)
@@ -944,7 +985,6 @@ end
 
 function M:cancelFetchTimer()
   if self.fetchTimer then
-    -- self.logger:Debug("Cancel fetch timer")
     Timer.Cancel(self.fetchTimer)
     self.fetchTimer = nil
   end
@@ -989,14 +1029,15 @@ function M:resolveSessionId()
     return Promise.FromResult(self.context.sessionId)
   end
 
-  return self.storage:Load(SESSION_ID_KEY):Next(function(sessionId)
-    if sessionId then
-      return Promise.FromResult(sessionId)
-    end
+  return self.storage:Load(SESSION_ID_KEY)
+    :Next(function(sessionId)
+      if sessionId then
+        return Promise.FromResult(sessionId)
+      end
 
-    sessionId = tostring(math.random(1, 1000000000))
-    return self.storage:Store(SESSION_ID_KEY, sessionId)
-  end)
+      sessionId = tostring(math.random(1, 1000000000))
+      return self.storage:Store(SESSION_ID_KEY, sessionId)
+    end)
 end
 
 function M:getHeaders()
@@ -1102,11 +1143,12 @@ function M:loadLastRefreshTimestamp()
     return Promise.FromResult(0)
   end
 
-  return self.storage:Load(LAST_UPDATE_KEY):Next(function(lastRefresh)
-    local contextHash = Util.computeContextHashValue(self.context)
-    local timestamp = (lastRefresh and lastRefresh.key == contextHash) and lastRefresh.timestamp or 0
-    return Promise.FromResult(timestamp)
-  end)
+  return self.storage:Load(LAST_UPDATE_KEY)
+    :Next(function(lastRefresh)
+      local contextHash = Util.computeContextHashValue(self.context)
+      local timestamp = (lastRefresh and lastRefresh.key == contextHash) and lastRefresh.timestamp or 0
+      return Promise.FromResult(timestamp)
+    end)
 end
 
 function M:storeLastRefreshTimestamp()
@@ -1169,6 +1211,7 @@ function M:fetchToggles(retry)
     headers["Content-Length"] = tostring(body and #body or 0)
   end
 
+  -- TODO request cancel 기능을 추가해야함
   local promise = Promise.New()
   self.request(url, method, headers, body, function(response)
     self:handleFetchResponse(url, method, headers, body, response, promise)

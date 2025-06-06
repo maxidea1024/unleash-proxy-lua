@@ -47,7 +47,7 @@ end
 function M.New(config)
   local self = {}
 
-  self.logger = config.loggerFactory:CreateLogger("M")
+  self.logger = config.loggerFactory:CreateLogger("EventEmitter")
   self.client = config.client
   self.on = {}
   self.currentMaxListeners = DEFAULT_MAX_LISTENERS
