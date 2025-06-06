@@ -798,7 +798,7 @@ watchToggleGroup:UnwatchAll()
 ]]
 
 function M:CreateWatchToggleGroup(name)
-  name = name or Util.GenerateRandomName("WatchToggleGroup:")
+  name = name or Util.GenerateRandomName()
 
   if not self.watchToggleGroups then
     self.watchToggleGroups = setmetatable({}, { __mode = "v" })
@@ -807,7 +807,7 @@ function M:CreateWatchToggleGroup(name)
   local group = WatchToggleGroup.New(self, name)
   table.insert(self.watchToggleGroups, group)
 
-  self.logger:Debug("👀 CreateWatchToggleGroup: name=`%s`", name)
+  self.logger:Debug("👀 CreateWatchToggleGroup: group=`%s`", name)
   return group
 end
 
@@ -818,7 +818,7 @@ function M:destroyAllWatchToggleGroups()
   if self.watchToggleGroups then
     for _, group in ipairs(self.watchToggleGroups) do
       if group then
-        self.logger:Debug("👀 DestroyWatchToggleGroup: name=`%s`", group.name)
+        self.logger:Debug("👀 DestroyWatchToggleGroup: group=`%s`", group.name)
 
         group:UnwatchAll()
       end
