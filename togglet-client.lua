@@ -1494,10 +1494,10 @@ end
 function M:emitError(type, message, functionName, logLevel, detail)
   local errorData = self:createError(type, message, functionName, detail)
 
-  -- Set default log level to Warning
+  -- set default log level to warning
   logLevel = logLevel or Logging.LogLevel.Warning
 
-  -- Output log message (include detail if available)
+  -- output log message (include detail if available)
   local logMessage = message
   if detail and self.logger:IsEnabled(logLevel) then
     if Util.IsTable(detail) then
@@ -1511,7 +1511,7 @@ function M:emitError(type, message, functionName, logLevel, detail)
       logMessage = logMessage .. "\n\nDetail: " .. tostring(detail)
     end
 
-    -- Append optional stack trace
+    -- append optional stack trace
     if errorData.stackTrace then
       logMessage = logMessage .. "\n" .. tostring(errorData.stackTrace)
     end
