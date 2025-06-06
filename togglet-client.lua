@@ -1182,9 +1182,10 @@ function M:initialFetchToggles()
     return Promise.Completed()
   end
 
-  return self:fetchToggles():Next(function()
-    self.synchronizedTogglesMap = Util.Clone(self.realtimeTogglesMap)
-  end)
+  return self:fetchToggles()
+    :Next(function()
+      self.synchronizedTogglesMap = Util.Clone(self.realtimeTogglesMap)
+    end)
 end
 
 -- TODO 기존 요청을 취소할수 있는기능이 필요하다.
