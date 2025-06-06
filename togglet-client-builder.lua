@@ -57,8 +57,8 @@ function M:Bootstrap(bootstrap, bootstrapOverride)
   return self
 end
 
-function M:Offline(offline)
-  self.config.offline = offline or true
+function M:OfflineMode(offlineMode)
+  self.config.offlineMode = offlineMode or true
   return self
 end
 
@@ -143,60 +143,60 @@ function M:TogglesStorageTTL(ttl)
 end
 
 function M:OnError(callback)
-  if self.onErrorCallbacks then
-    table.insert(self.onErrorCallbacks, callback)
+  if self.config.onErrorCallbacks then
+    table.insert(self.config.onErrorCallbacks, callback)
   else
-    self.onErrorCallbacks = { callback }
+    self.config.onErrorCallbacks = { callback }
   end
   return self
 end
 
 function M:OnInit(callback)
-  if self.onInitCallbacks then
-    table.insert(self.onInitCallbacks, callback)
+  if self.config.onInitCallbacks then
+    table.insert(self.config.onInitCallbacks, callback)
   else
-    self.onInitCallbacks = { callback }
+    self.config.onInitCallbacks = { callback }
   end
   return self
 end
 
 function M:OnReady(callback)
-  if self.onReadyCallbacks then
-    table.insert(self.onReadyCallbacks, callback)
+  if self.config.onReadyCallbacks then
+    table.insert(self.config.onReadyCallbacks, callback)
   else
-    self.onReadyCallbacks = { callback }
+    self.config.onReadyCallbacks = { callback }
   end
   return self
 end
 
 function M:OnUpdate(callback)
-  if self.onUpdateCallbacks then
-    table.insert(self.onUpdateCallbacks, callback)
+  if self.config.onUpdateCallbacks then
+    table.insert(self.config.onUpdateCallbacks, callback)
   else
-    self.onUpdateCallbacks = { callback }
+    self.config.onUpdateCallbacks = { callback }
   end
   return self
 end
 
 function M:OnSent(callback)
-  if self.onSentCallbacks then
-    table.insert(self.onSentCallbacks, callback)
+  if self.config.onSentCallbacks then
+    table.insert(self.config.onSentCallbacks, callback)
   else
-    self.onSentCallbacks = { callback }
+    self.config.onSentCallbacks = { callback }
   end
   return self
 end
 
 function M:WatchToggle(featureName, callback)
-  if not self.watchToggles then
-    self.watchToggles = {
+  if not self.config.watchToggles then
+    self.config.watchToggles = {
       {
         featureName = featureName,
         callback = callback
       }
     }
   else
-    table.insert(self.watchToggles, {
+    table.insert(self.config.watchToggles, {
       featureName = featureName,
       callback = callback
     })
@@ -205,15 +205,15 @@ function M:WatchToggle(featureName, callback)
 end
 
 function M:WatchToggleWithInitialState(featureName, callback)
-  if not self.watchToggleWithInitialStates then
-    self.watchToggleWithInitialStates = {
+  if not self.config.watchToggleWithInitialStates then
+    self.config.watchToggleWithInitialStates = {
       {
         featureName = featureName,
         callback = callback
       }
     }
   else
-    table.insert(self.watchToggleWithInitialStates, {
+    table.insert(self.config.watchToggleWithInitialStates, {
       featureName = featureName,
       callback = callback
     })

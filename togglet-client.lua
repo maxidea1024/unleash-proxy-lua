@@ -101,7 +101,7 @@ function M.New(config)
   Validation.RequireTable(config, "config", "ToggletClient.New")
 
   self.devMode = config.devMode or false
-  self.offline = config.offline or false
+  self.offlineMode = config.offlineMode or false
 
   -- 주의: config.logFormatter는 아직 적용안됨.
 
@@ -122,7 +122,7 @@ function M.New(config)
 
   self.logger = self.loggerFactory:CreateLogger("Togglet")
 
-  if not self.offline then
+  if not self.offlineMode then
     Validation.RequireField(config, "appName", "config", "ToggletClient.New")
     Validation.RequireField(config, "url", "config", "ToggletClient.New")
     Validation.RequireField(config, "request", "config", "ToggletClient.New")
@@ -138,9 +138,9 @@ function M.New(config)
   self.experimental = Util.Clone(config.experimental or {})
   self.lastRefreshTimestamp = 0
   self.etag = nil
-  self.readyEventEmitted = false
-  self.fetchedFromServer = false
-  self.started = false
+  self.readyEventEmitted = self.offlineMode == true
+  self.fetchedFromServer = self.offlineMode == true
+  self.started = self.offlineMode == true
   self.sdkState = "initializing"
 
   self.realtimeTogglesMap = convertTogglesArrayToMap(config.bootstrap or {})
@@ -179,7 +179,7 @@ function M.New(config)
   self.customHeaders = config.customHeaders or {}
   self.request = config.request
   self.usePOSTrequests = config.usePOSTrequests or false
-  self.refreshInterval = (self.offline and 0) or (config.disableRefresh and 0) or (config.refreshInterval or 15)
+  self.refreshInterval = (self.offlineMode and 0) or (config.disableRefresh and 0) or (config.refreshInterval or 15)
   self.fetchFailures = 0
   self.fetchingContext = nil
   self.fetchingContextVersion = self.contextVersion
@@ -191,7 +191,7 @@ function M.New(config)
     jitter = config.backoff and config.backoff.jitter or 0.2
   }
 
-  local metricsDisabled = self.offline or (config.disableMetrics or false)
+  local metricsDisabled = self.offlineMode or (config.disableMetrics or false)
   if metricsDisabled then
     self.metricsReporter = MetricsReporterNoop.New()
   else
@@ -280,7 +280,7 @@ function M:summarizeConfiguration()
     environment = self.environment,
     sdkName = self.sdkName,
     connectionId = self.connectionId,
-    offline = self.offline,
+    offlineMode = self.offlineMode,
     devMode = self.devMode,
     explicitSyncMode = self.explicitSyncMode,
     dataFetchMode = self.refreshInterval > 0 and "polling" or "manual",
@@ -295,7 +295,7 @@ function M:summarizeConfiguration()
 end
 
 function M:Start()
-  if self.offline then
+  if self.offlineMode then
     return Promise.Completed()
   end
 
@@ -416,7 +416,7 @@ function M:setReady()
 end
 
 function M:WaitUntilReady()
-  if self.offline or self.readyEventEmitted then
+  if self.readyEventEmitted then
     return Promise.Completed()
   end
 
@@ -448,7 +448,7 @@ function M:IsEnabled(featureName, forceSelectRealtimeToggle)
   local toggle = togglesMap[featureName]
   local enabled = toggle and toggle.enabled or false
 
-  if not self.offline then
+  if not self.offlineMode then
     self.metricsReporter:Count(featureName, enabled)
 
     local impressionData = self.impressionDataAll or (toggle and toggle.impressionData)
@@ -476,7 +476,7 @@ function M:GetVariant(featureName, forceSelectRealtimeToggle)
   local enabled = toggle and toggle.enabled or false
   local variant = toggle and toggle.variant or DEFAULT_DISABLED_VARIANT
 
-  if not self.offline then
+  if not self.offlineMode then
     self.metricsReporter:CountVariant(featureName, variant.name)
     self.metricsReporter:Count(featureName, enabled)
 
@@ -536,7 +536,7 @@ function M:selectTogglesMap(forceSelectRealtimeToggle)
 end
 
 function M:SyncToggles(fetchNow)
-  if self.offline or not self.explicitSyncMode then
+  if self.offlineMode or not self.explicitSyncMode then
     return Promise.Completed()
   end
 
@@ -560,7 +560,7 @@ function M:conditionalSyncTogglesMap(force)
 end
 
 function M:WatchToggle(featureName, callback)
-  if self.offline then return function() end end
+  if self.offlineMode then return function() end end
 
   Validation.RequireName(featureName, "featureName", "ToggletClient:WatchToggle")
   Validation.RequireFunction(callback, "callback", "ToggletClient:WatchToggle")
@@ -581,7 +581,7 @@ function M:WatchToggleWithInitialState(featureName, callback)
   Validation.RequireFunction(callback, "callback", "ToggletClient:WatchToggleWithInitialState")
 
   -- 초기화를 위해서 바로 call해줘야함!
-  if self.offline then
+  if self.offlineMode then
     local toggle = self:GetToggle(featureName, true) -- realtime
     self.logger:Debug("👀 WatchToggleWithInitialState: feature=`%s`, enabled=%s", featureName, toggle:IsEnabled())
     -- 안전하게 호출할 방법이 필요하지 않을까?
@@ -617,7 +617,7 @@ function M:WatchToggleWithInitialState(featureName, callback)
 end
 
 function M:UnwatchToggle(featureName, callback)
-  if self.offline then return end
+  if self.offlineMode then return end
 
   Validation.RequireName(featureName, "featureName", "ToggletClient:UnwatchToggle")
   Validation.RequireFunction(callback, "callback", "ToggletClient:UnwatchToggle")
@@ -670,7 +670,7 @@ function M:destroyAllWatchToggleGroups()
 end
 
 function M:UpdateToggles()
-  if self.offline then
+  if self.offlineMode then
     return Promise.Completed()
   end
 
@@ -763,7 +763,7 @@ function M:advanceContextVersion()
 end
 
 function M:SetContextFields(fields)
-  if self.offline then
+  if self.offlineMode then
     return Promise.Completed()
   end
 
@@ -780,7 +780,7 @@ function M:SetContextFields(fields)
 end
 
 function M:SetContextField(field, value)
-  if self.offline then
+  if self.offlineMode then
     return Promise.Completed()
   end
 
@@ -797,7 +797,7 @@ function M:SetContextField(field, value)
 end
 
 function M:RemoveContextField(field)
-  if self.offline then
+  if self.offlineMode then
     return Promise.Completed()
   end
 
@@ -953,7 +953,7 @@ end
 function M:Stop()
   local promise = Promise.New()
 
-  if self.offline then
+  if self.offlineMode then
     return promise:Resolve()
   end
 
@@ -973,7 +973,7 @@ function M:Stop()
 end
 
 function M:IsReady()
-  return self.offline or self.readyEventEmitted
+  return self.readyEventEmitted
 end
 
 function M:GetError()
@@ -1406,19 +1406,19 @@ function M:emit(event, ...)
 end
 
 function M:On(event, callback)
-  if self.offline then return function() end end
+  if self.offlineMode then return function() end end
 
   return self.eventEmitter:On(event, callback)
 end
 
 function M:Once(event, callback)
-  if self.offline then return function() end end
+  if self.offlineMode then return function() end end
 
   return self.eventEmitter:Once(event, callback)
 end
 
 function M:Off(event, callback)
-  if self.offline then return end
+  if self.offlineMode then return end
 
   self.eventEmitter:Off(event, callback)
 end
