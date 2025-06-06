@@ -15,7 +15,7 @@ function M.New()
   local self = setmetatable({}, M)
 
   self.config = {
-    appName = "togglet-lua-client"
+    appName = "togglet-frontend-client-lua"
   }
 
   return self
