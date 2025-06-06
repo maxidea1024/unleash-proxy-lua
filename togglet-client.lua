@@ -43,6 +43,14 @@ local DEFINED_CONTEXT_FIELDS = {
   currentTime = true,
 }
 
+local ACCEPTABLE_CONTEXT_FIELD_TYPES = {
+  ["bool"] = true,
+  ["string"] = true,
+  ["number"] = true,
+  ["userdata"] = true, -- force tostring
+  ["nil"] = true,
+}
+
 local IMPRESSION_EVENTS = {
   IS_ENABLED = "isEnabled",
   GET_VARIANT = "getVariant",
@@ -87,28 +95,28 @@ local function convertTogglesArrayToMap(togglesArray)
   return togglesMap
 end
 
+local function validateContextFieldValue(field, value)
+  -- TODO
+  local valueType = type(value)
+  if valueType == "userdata" then
+    return tostring(value)
+  end
+
+  return value
+end
+
 local function normalizeContext(context)
   local result = {}
   for key, val in pairs(context) do
     if val ~= nil and key ~= "properties" then
-      if type(val) == "userdata" then
-        result[key] = tostring(val)
-      else
-       -- TODO value 타입은 string, bool, number, nil 만 허용함
-        result[key] = val
-      end
+      result[key] = validateContextFieldValue(key, val)
     end
   end
 
   if context.properties and type(context.properties) == "table" then
     for key, val in pairs(context.properties) do
       if val ~= nil then
-        if type(val) == "userdata" then
-          result[key] = tostring(val)
-        else
-          -- TODO value 타입은 string, bool, number, nil 만 허용함
-          result[key] = val
-        end
+        result[key] = validateContextFieldValue(key, val)
       end
     end
   end
@@ -468,6 +476,115 @@ function M:WaitUntilReady()
   return promise
 end
 
+function M:GetContext()
+  return Util.Clone(self.context)
+end
+
+function M:updateContextField(field, value)
+  Validation.RequireName(field, "field", "ToggletClient:updateContextField")
+
+  if STATIC_CONTEXT_FIELDS[field] then
+    self.logger:Warn("🧩 `%s` is a static field. It can't be updated with ToggletClient:updateContextField.", field)
+    return false
+  end
+
+  self.logger:Debug("🧩 Update a context field: field=`%s`, value=`%s`", field, value)
+
+  value = validateContextFieldValue(field, value)
+
+  if DEFINED_CONTEXT_FIELDS[field] then
+    if value == self.context[field] then return false end
+    self.context[field] = value
+  else
+    if self.context.properties then
+      if value == self.context.properties[field] then return false end
+    else
+      self.context.properties = {}
+    end
+
+    self.context.properties[field] = value
+  end
+
+  return true
+end
+
+function M:updateContextFields(fields)
+  local changeds = 0
+  for field, value in pairs(fields) do
+    if self:updateContextField(field, value) then
+      changeds = changeds + 1
+    end
+  end
+
+  return changeds
+end
+
+function M:advanceContextVersion()
+  self.contextVersion = self.contextVersion + 1
+end
+
+function M:SetContextFields(fields)
+  if self.offlineMode then
+    return Promise.Completed()
+  end
+
+  local changeds = self:updateContextFields(fields);
+  if changeds > 0 then
+    self:advanceContextVersion()
+
+    if self.readyEventEmitted then
+      return self:UpdateToggles()
+    end
+  end
+
+  return Promise.Completed()
+end
+
+function M:SetContextField(field, value)
+  if self.offlineMode then
+    return Promise.Completed()
+  end
+
+  local changed = self:updateContextField(field, value)
+  if changed then
+    self:advanceContextVersion()
+
+    if self.readyEventEmitted then
+      return self:UpdateToggles()
+    end
+  end
+
+  return Promise.Completed()
+end
+
+function M:RemoveContextField(field)
+  if self.offlineMode then
+    return Promise.Completed()
+  end
+
+  if DEFINED_CONTEXT_FIELDS[field] then
+    if not self.context[field] then
+      return Promise.Completed()
+    end
+
+    self.context[field] = nil
+  elseif self.context.properties and type(self.context.properties) == "table" then
+    if not self.context.properties[field] then
+      return Promise.Completed()
+    end
+
+    table.remove(self.context.properties, field)
+  end
+
+  self:advanceContextVersion()
+
+  if self.readyEventEmitted then
+    return self:UpdateToggles()
+  else
+    return Promise.Completed()
+  end
+end
+
 function M:GetAllToggles(forceSelectRealtimeToggle)
   local togglesMap = self:selectTogglesMap(forceSelectRealtimeToggle)
   local result = {}
@@ -748,120 +865,6 @@ function M:UpdateToggles()
       end)
     end)
     return promise
-  end
-end
-
-function M:GetContext()
-  return Util.Clone(self.context)
-end
-
-function M:updateContextField(field, value)
-  Validation.RequireName(field, "field", "ToggletClient:updateContextField")
-
-  -- userdata 대응
-  if type(value) == "userdata" then
-    value = tostring(value)
-  end
-  -- TODO value 타입은 string, bool, number, nil 만 허용함
-
-  if STATIC_CONTEXT_FIELDS[field] then
-    self.logger:Warn("🧩 `%s` is a static field. It can't be updated with ToggletClient:updateContextField.", field)
-    return false
-  end
-
-  self.logger:Debug("🧩 Update a context field: field=`%s`, value=`%s`", field, value)
-
-  if DEFINED_CONTEXT_FIELDS[field] then
-    if value == self.context[field] then return false end
-
-    self.context[field] = value
-  else
-    if not self.context.properties then
-      self.context.properties = {}
-    else
-      if value == self.context.properties[field] then return false end
-    end
-
-    self.context.properties[field] = value
-  end
-
-  return true
-end
-
-function M:updateContextFields(fields)
-  local changeds = 0
-  for field, value in pairs(fields) do
-    if self:updateContextField(field, value) then
-      changeds = changeds + 1
-    end
-  end
-
-  return changeds
-end
-
-function M:advanceContextVersion()
-  self.contextVersion = self.contextVersion + 1
-end
-
-function M:SetContextFields(fields)
-  if self.offlineMode then
-    return Promise.Completed()
-  end
-
-  local changeds = self:updateContextFields(fields);
-  if changeds > 0 then
-    self:advanceContextVersion()
-
-    if self.readyEventEmitted then
-      return self:UpdateToggles()
-    end
-  end
-
-  return Promise.Completed()
-end
-
-function M:SetContextField(field, value)
-  if self.offlineMode then
-    return Promise.Completed()
-  end
-
-  local changed = self:updateContextField(field, value)
-  if changed then
-    self:advanceContextVersion()
-
-    if self.readyEventEmitted then
-      return self:UpdateToggles()
-    end
-  end
-
-  return Promise.Completed()
-end
-
-function M:RemoveContextField(field)
-  if self.offlineMode then
-    return Promise.Completed()
-  end
-
-  if DEFINED_CONTEXT_FIELDS[field] then
-    if not self.context[field] then
-      return Promise.Completed()
-    end
-
-    self.context[field] = nil
-  elseif self.context.properties and type(self.context.properties) == "table" then
-    if not self.context.properties[field] then
-      return Promise.Completed()
-    end
-
-    table.remove(self.context.properties, field)
-  end
-
-  self:advanceContextVersion()
-
-  if self.readyEventEmitted then
-    return self:UpdateToggles()
-  else
-    return Promise.Completed()
   end
 end
 
