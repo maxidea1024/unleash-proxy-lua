@@ -1090,13 +1090,13 @@ function M:storeToggles(toggleArray)
   -- Detects disabled flags
   for _, oldToggle in pairs(oldTogglesMap) do
     local newToggle = newTogglesMap[oldToggle.name]
-    local toggleIsDisabled = newToggle == nil
+    local toggleIsDisabled = newToggle == nil or oldToggle.enabled and not newToggle.enabled
     if toggleIsDisabled then
       self.logger:Debug("✨ Toggle `%s` is disabled.", oldToggle.name)
 
       local eventName = "update:" .. oldToggle.name
       if self.eventEmitter:HasListeners(eventName) then
-        self.eventEmitter:Emit(eventName, self:GetToggle(oldToggle.name, true)) -- reamtime
+        self.eventEmitter:Emit(eventName, self:GetToggle(oldToggle.name, true)) -- realtime
       end
     end
   end
@@ -1109,7 +1109,10 @@ function M:storeToggles(toggleArray)
     if not oldToggle then
       self.logger:Debug("✨ Toggle `%s` is enabled.", newToggle.name)
       emitEvent = true
-    elseif Util.CalculateHash(oldToggle) ~= Util.CalculateHash(newToggle) then
+    elseif not oldToggle.enabled and newToggle.enabled then
+      self.logger:Debug("✨ Toggle `%s` is enabled.", newToggle.name)
+      emitEvent = true
+    elseif Util.CalculateHash(oldToggle) ~= Util.CalculateHash(newToggle) then -- hash 비교를 제거하자.
       self.logger:Debug("✨ Toggle `%s` is enabled and variants changed.", newToggle.name)
       emitEvent = true
     end
