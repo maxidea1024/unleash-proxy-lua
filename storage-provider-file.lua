@@ -3,11 +3,13 @@ local Util = require("framework.3rdparty.togglet.util")
 local Promise = require("framework.3rdparty.togglet.promise")
 
 local M = {}
-M.__index = M
-M.__name = "StorageProviderFile"
 
 function M.New(backupPath, prefix)
-  local self = setmetatable({}, M)
+  local self = setmetatable({}, {
+    __index = M,
+    __name = "StorageProviderFile"
+  })
+
   self.backupPath = backupPath or Util.GetTempDir()
   self.prefix = prefix or ""
   return self

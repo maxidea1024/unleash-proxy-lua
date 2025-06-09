@@ -10,8 +10,6 @@ local Timer = require("framework.3rdparty.togglet.timer")
 local Promise = require("framework.3rdparty.togglet.promise")
 
 local M = {}
-M.__index = M
-M.__name = "MetricsReporter"
 
 function M.New(config)
   Validation.RequireTable(config, "config", "MetricsReporter.New")
@@ -43,7 +41,10 @@ function M.New(config)
     Validation.RequireFunction(config.onSent, "config.onSent", "MetricsReporter.New")
   end
 
-  local self = setmetatable({}, M)
+  local self = setmetatable({}, {
+    __index = M,
+    __name = "MetricsReporter"
+  })
   self.logger = config.loggerFactory:CreateLogger("MetricsReporter")
   self.client = config.client
   self.onSent = config.onSent or function() end

@@ -2,10 +2,6 @@ local Json = require("framework.3rdparty.togglet.dkjson")
 local Validation = require("framework.3rdparty.togglet.validation")
 local ErrorTypes = require("framework.3rdparty.togglet.error-types")
 
-local M = {}
-M.__index = M
-M.__name = "ToggleProxy"
-
 -- Constants for common default values
 local DEFAULT_VALUES = {
   BOOLEAN = false,
@@ -38,15 +34,22 @@ local function validatePayload(self, expectedType, defaultValue)
   return true, self.variant.payload.value
 end
 
+local M = {}
+
 function M.New(client, featureName, variant)
   Validation.RequireValue(client, "client", "ToggleProxy.New")
   Validation.RequireName(featureName, "featureName", "ToggleProxy.New")
   Validation.RequireTable(variant, "variant", "ToggleProxy.New")
 
-  local self = setmetatable({}, M)
+  local self = setmetatable({}, {
+    __index = M,
+    __name = "ToggleProxy",
+  })
+
   self.client = client
   self.featureName = featureName
   self.variant = variant
+
   return self
 end
 

@@ -129,11 +129,12 @@ end
 ------------------------------------------------------------------------------
 
 local M = {}
-M.__index = M
-M.__name = "ToggletClient"
 
 function M.New(config)
-  local self = setmetatable({}, M)
+  local self = setmetatable({}, {
+    __index = M,
+    __name = "ToggletClient",
+  })
 
   Validation.RequireTable(config, "config", "ToggletClient.New")
 

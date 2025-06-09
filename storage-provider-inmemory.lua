@@ -1,12 +1,15 @@
 local Promise = require("framework.3rdparty.togglet.promise")
 
 local M = {}
-M.__index = M
-M.__name = "InMemoryStorageProvider"
 
 function M.New()
-  local self = setmetatable({}, M)
+  local self = setmetatable({}, {
+    __index = M,
+    __name = "InMemoryStorageProvider"
+  })
+
   self.store = {}
+
   return self
 end
 

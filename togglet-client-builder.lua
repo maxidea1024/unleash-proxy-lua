@@ -8,11 +8,12 @@ local FileStorageProvider = require("framework.3rdparty.togglet.storage-provider
 local InMemoryStorageProvider = require("framework.3rdparty.togglet.storage-provider-inmemory")
 
 local M = {}
-M.__index = M
-M.__name = "ToggletClientBuilder"
 
 function M.New()
-  local self = setmetatable({}, M)
+  local self = setmetatable({}, {
+    __index = M,
+    __name = "ToggletClientBuilder",
+  })
 
   self.config = {
     appName = "togglet-frontend-client-lua"

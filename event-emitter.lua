@@ -4,10 +4,6 @@ local PREFIX = "__listener__"
 local PREFIX_LENGTH = #PREFIX
 local DEFAULT_MAX_LISTENERS = 10
 
-local M = {}
-M.__index = M
-M.__name = "EventEmtter"
-
 local function removeEntry(t, pred)
   local i = 1
   while i <= #t do
@@ -44,6 +40,8 @@ local function getCachedEventName(event)
   return cached
 end
 
+local M = {}
+
 function M.New(config)
   local self = {}
 
@@ -54,6 +52,7 @@ function M.New(config)
 
   return _G.setmetatable_gc(self, {
     __index = M,
+    __name = "EventEmitter",
     __gc = function(instance)
       if instance.on then
         for _, listeners in pairs(instance.on) do

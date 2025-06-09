@@ -8,13 +8,12 @@ function M.New(client, name)
 
   return _G.setmetatable_gc(self, {
     __index = M,
-    __tostring = function() return "WatchToggleGroup:" .. name end,
+    __name = "WatchToggleGroup",
+    __tostring = function(self) return "WatchToggleGroup:" .. self.name end,
     __gc = function(instance)
       -- Stop() 호출 이후에 gc 정리가 일어나게 되면, 문제가 발생할수 있음.
       -- gc 발생시 처리를 제거하고 Stop() 함수에서 정리하는 형태로 변경하는게 좋을듯.
-      if instance.unregisters then
-        instance:UnwatchAll()
-      end
+      instance:UnwatchAll()
     end
   })
 end

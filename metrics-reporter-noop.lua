@@ -1,11 +1,12 @@
 local Promise = require("framework.3rdparty.togglet.promise")
 
 local M = {}
-M.__index = M
-M.__name = "MetricsReporterNoop"
 
 function M.New(config)
-  local self = setmetatable({}, M)
+  local self = setmetatable({}, {
+    __index = M,
+    __name = "MetricsReporterNoop"
+  })
   return self
 end
 
