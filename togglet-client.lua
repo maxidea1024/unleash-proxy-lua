@@ -532,9 +532,7 @@ function M:SetContextFields(fields)
   if changeds > 0 then
     self:advanceContextVersion()
 
-    if self.readyEventEmitted then
-      return self:UpdateToggles()
-    end
+    return self:UpdateToggles()
   end
 
   return Promise.Completed()
@@ -549,9 +547,7 @@ function M:SetContextField(field, value)
   if changed then
     self:advanceContextVersion()
 
-    if self.readyEventEmitted then
-      return self:UpdateToggles()
-    end
+    return self:UpdateToggles()
   end
 
   return Promise.Completed()
@@ -578,11 +574,7 @@ function M:RemoveContextField(field)
 
   self:advanceContextVersion()
 
-  if self.readyEventEmitted then
-    return self:UpdateToggles()
-  else
-    return Promise.Completed()
-  end
+  return self:UpdateToggles()
 end
 
 function M:GetAllToggles(forceSelectRealtimeToggle)

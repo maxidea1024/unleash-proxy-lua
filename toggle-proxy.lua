@@ -224,8 +224,8 @@ end
 --   end
 -- end
 
-function M:GetPayloadType()
-  return self.variant.payload and self.variant.payload.type or "<none>"
+function M:GetValueType()
+  return self.variant.payload and self.variant.payload.type or "boolean"
 end
 
 -- Cache for variant proxies to avoid creating new objects for the same feature/variant
