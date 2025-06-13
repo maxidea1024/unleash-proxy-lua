@@ -13,6 +13,9 @@
 --   Unleash frontend api에서 내려받는 형태를 바꾸는게 맞을듯하다.
 --   추가적으로 이 문제점으로 인해서 boolVariation 함수에 defaultValue를 지정할수 없다.
 
+-- FIXME
+--    Start/Stop 반복 사이클이 동작하는지 확인(변수 초기화, 콜백 이슈들)
+
 local Json = require("framework.3rdparty.togglet.dkjson")
 local Timer = require("framework.3rdparty.togglet.timer")
 local MetricsReporter = require("framework.3rdparty.togglet.metrics-reporter")
@@ -96,16 +99,19 @@ local function convertTogglesArrayToMap(togglesArray)
 end
 
 local function validateContextFieldValue(field, value)
-  -- TODO
   local valueType = type(value)
   if valueType == "userdata" then
     return tostring(value)
   end
 
+  if not ACCEPTABLE_CONTEXT_FIELD_TYPES[valueType] then
+    error(string.format("Invalid context field value type for `%s`. Only boolean, string, number, userdata(with tostring()), and nil are allowed.", field))
+  end
+
   return value
 end
 
-local function normalizeContext(context)
+local function validateContext(context)
   local result = {}
   for key, val in pairs(context) do
     if val ~= nil and key ~= "properties" then
@@ -131,22 +137,22 @@ end
 local M = {}
 
 function M.New(config)
+  Validation.RequireTable(config, "config", "ToggletClient.New")
+
   local self = setmetatable({}, {
     __index = M,
     __name = "ToggletClient",
   })
 
-  Validation.RequireTable(config, "config", "ToggletClient.New")
-
   self.devMode = config.devMode or false
   self.offlineMode = config.offlineMode or false
 
-  -- 주의: config.logFormatter는 아직 적용안됨.
+  -- Note: config.logFormatter is not yet applied
 
-  -- devMode에서는 Debug, devMode가 아니면 Info 레벨을 기본으로 한다.
+  -- Use Debug level in devMode, otherwise use Info level as default
   local logLevel = self.devMode and Logging.LogLevel.Debug or Logging.LogLevel.Info
 
-  -- logLevel을 직접 지정한 경우에는 지정된것을 사용.
+  -- Use specified log level if provided
   if config.logLevel then
     config.logLevel = Logging.LogLevel[config.logLevel:gsub("^%l", string.upper)]
     if not config.logLevel then
@@ -155,7 +161,7 @@ function M.New(config)
     logLevel = config.logLevel
   end
 
-  -- logSinks가 지정된 경우에는 지정된것을 사용해서 loggerFactory를 생성후 사용.
+  -- Use specified log sinks if provided
   if config.logSinks then
     self.loggerFactory = Logging.LoggerFactory.New(logLevel, config.logSinks)
   else
@@ -211,7 +217,7 @@ function M.New(config)
     end
   end
 
-  self.context = normalizeContext(context)
+  self.context = validateContext(context)
   self.contextVersion = 1
 
   self.eventEmitter = EventEmitter.New({
@@ -242,9 +248,7 @@ function M.New(config)
   }
 
   local metricsDisabled = self.offlineMode or (config.disableMetrics or false)
-  if metricsDisabled then
-    self.metricsReporter = MetricsReporterNoop.New()
-  else
+  if not metricsDisabled then
     self.metricsReporter = MetricsReporter.New({
       client = self,
       connectionId = self.connectionId,
@@ -260,6 +264,8 @@ function M.New(config)
       onSent = function(data) self:emit(Events.SENT, data) end,
       loggerFactory = self.loggerFactory,
     })
+  else
+    self.metricsReporter = MetricsReporterNoop.New()
   end
 
   self:registerEventHandlers(config)
@@ -532,7 +538,6 @@ function M:SetContextFields(fields)
   local changeds = self:updateContextFields(fields);
   if changeds > 0 then
     self:advanceContextVersion()
-
     return self:UpdateToggles()
   end
 
@@ -547,7 +552,6 @@ function M:SetContextField(field, value)
   local changed = self:updateContextField(field, value)
   if changed then
     self:advanceContextVersion()
-
     return self:UpdateToggles()
   end
 
@@ -574,7 +578,6 @@ function M:RemoveContextField(field)
   end
 
   self:advanceContextVersion()
-
   return self:UpdateToggles()
 end
 
@@ -691,6 +694,8 @@ function M:SyncToggles(fetchNow)
     return Promise.Completed()
   end
 
+  fetchNow = fetchNow or true
+
   if fetchNow then
     return self:UpdateToggles()
         :Next(function()
@@ -731,34 +736,29 @@ function M:WatchToggleWithInitialState(featureName, callback)
   Validation.RequireName(featureName, "featureName", "ToggletClient:WatchToggleWithInitialState")
   Validation.RequireFunction(callback, "callback", "ToggletClient:WatchToggleWithInitialState")
 
-  -- 초기화를 위해서 바로 call해줘야함!
-  if self.offlineMode then
-    local toggle = self:GetToggle(featureName, true) -- realtime
-    self.logger:Debug("👀 WatchToggleWithInitialState: feature=`%s`, enabled=%s", featureName, toggle:IsEnabled())
-    -- 안전하게 호출할 방법이 필요하지 않을까?
-    if callback and type(callback) == "function" then
-      callback(toggle)
-    end
+  local toggle = self:GetToggle(featureName, true) -- realtime
 
-    -- 오프라인에서 더이상의 처리는 의미 없다.
-    return
+  -- Must call immediately for initialization!
+  if self.offlineMode then
+    self.logger:Debug("👀 WatchToggleWithInitialState: feature=`%s`, enabled=%s", featureName, toggle:IsEnabled())
+    callback(toggle) -- 안전하게 호출할 방법이 필요하지 않을까?
+    return -- 오프라인에서 더이상의 처리는 의미 없다.
   end
 
   local eventName = "update:" .. featureName
   self.eventEmitter:On(eventName, callback)
 
   if self.readyEventEmitted then
-    local toggle = self:GetToggle(featureName, true) -- realtime
     self.logger:Debug("👀 WatchToggleWithInitialState: feature=`%s`, enabled=%s", featureName, toggle:IsEnabled())
     self.eventEmitter:Emit(eventName, toggle)
   else
     self.logger:Debug("👀 WatchToggleWithInitialState: Waiting for `ready` event. feature=`%s` enabled=???", featureName)
 
     self:Once(Events.READY, function()
-      local toggle = self:GetToggle(featureName, true) -- realtime
+      local pendedToggle = self:GetToggle(featureName, true) -- realtime
       self.logger:Debug("👀 WatchToggleWithInitialState(Pended): feature=`%s`, enabled=%s", featureName,
-        toggle:IsEnabled())
-      self.eventEmitter:Emit(eventName, toggle)
+        pendedToggle:IsEnabled())
+      self.eventEmitter:Emit(eventName, pendedToggle)
     end)
   end
 
@@ -1100,13 +1100,13 @@ function M:storeToggles(toggleArray)
 
     local oldToggle = oldTogglesMap[newToggle.name]
     if not oldToggle then
-      self.logger:Debug("✨ Toggle `%s` is enabled.", newToggle.name)
+      self.logger:Info("✨ Toggle `%s` is enabled.", newToggle.name)
       emitEvent = true
     elseif not oldToggle.enabled and newToggle.enabled then
-      self.logger:Debug("✨ Toggle `%s` is enabled.", newToggle.name)
+      self.logger:Info("✨ Toggle `%s` is enabled.", newToggle.name)
       emitEvent = true
     elseif Util.CalculateHash(oldToggle) ~= Util.CalculateHash(newToggle) then -- hash 비교를 제거하자.
-      self.logger:Debug("✨ Toggle `%s` is enabled and variants changed.", newToggle.name)
+      self.logger:Info("✨ Toggle `%s` is enabled and variants changed.", newToggle.name)
       emitEvent = true
     end
 
@@ -1184,7 +1184,7 @@ function M:initialFetchToggles()
     end)
 end
 
--- TODO 기존 요청을 취소할수 있는기능이 필요하다.
+-- TODO Need ability to cancel existing requests
 function M:fetchToggles(retry)
   self.fetching = true
 

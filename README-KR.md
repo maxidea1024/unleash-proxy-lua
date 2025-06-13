@@ -50,15 +50,15 @@ local client = ToggletClient.New({
   url = "https://togglet.example.com/api",
   clientKey = "your-client-key",
   request = yourHttpRequestFunction,
-  
+
   -- 선택적 매개변수
   environment = "production",               -- 환경 이름 (기본값: "default")
   refreshInterval = 15,                     -- 폴링 간격(초) (기본값: 15)
   disableAutoStart = false,                 -- true로 설정하여 수동으로 시작
-  offline = false,                          -- 오프라인 모드 활성화
+  offlineMode = false,                      -- 오프라인 모드 활성화
   bootstrap = initialFeatureFlags,          -- 초기 피처 플래그
   bootstrapOverride = true,                 -- 저장된 플래그를 부트스트랩으로 덮어쓰기
-  useExplicitSyncMode = false,              -- 명시적 동기화 모드 활성화
+  explicitSyncMode = false,                 -- 명시적 동기화 모드 활성화
   disableRefresh = false,                   -- 자동 폴링 비활성화
   usePOSTrequests = false,                  -- API 요청에 GET 대신 POST 사용
   storageProvider = customStorageProvider,  -- 사용자 정의 스토리지 제공자
@@ -187,7 +187,7 @@ local client = ToggletClient.New({
   request = yourHttpRequestFunction,
 
   -- 명시적 동기화 모드 활성화
-  useExplicitSyncMode = true
+  explicitSyncMode = true
 })
 ```
 
@@ -220,8 +220,6 @@ local client = ToggletClient.New({
 })
 ```
 
-<!-- 나머지 컨텍스트 관련 내용 유지 -->
-
 ## 피처 플래그 노출 데이터(Impression Data)
 
 노출 데이터(Impression Data)는 사용자가 특정 피처 플래그에 노출되었을 때 기록되는 정보입니다. 이 기능을 활용하면 피처 플래그의 사용 패턴을 분석하고, A/B 테스트 결과를 측정하며, 문제를 디버깅하는 데 도움이 됩니다.
@@ -241,7 +239,7 @@ local client = ToggletClient.New({
 client:On(Togglet.Events.IMPRESSION, function(event)
   -- 노출 이벤트 처리
   print("피처 플래그 노출:", event.featureName, "활성화:", event.enabled)
-  
+
   -- 분석 시스템으로 이벤트 전송
   trackAnalyticsEvent("feature_impression", {
     featureName = event.featureName,
@@ -293,7 +291,7 @@ function initializeGameServices()
   end
 
   -- 매치메이킹 풀 크기 조정
-  local matchmakingConfig = client:GetVariant("matchmaking-config")
+  local matchmakingConfig = client:GetToggle("matchmaking-config")
   if matchmakingConfig:IsEnabled() then
     configureMatchmaking(matchmakingConfig:JsonVariation({}))
   end
@@ -334,7 +332,7 @@ end
 ```lua
 function initializeGameBalance()
   -- 무기 밸런스
-  local weaponBalance = client:GetVariant("weapon-balance")
+  local weaponBalance = client:GetToggle("weapon-balance")
   if weaponBalance:IsEnabled() then
     applyWeaponStats(weaponBalance:JsonVariation({
       assault_rifle: { damage: 25, fireRate: 0.1, recoil: 0.3 },
@@ -344,13 +342,13 @@ function initializeGameBalance()
   }
 
   -- 캐릭터 능력치
-  local characterBalance = client:GetVariant("character-balance")
+  local characterBalance = client:GetToggle("character-balance")
   if characterBalance:IsEnabled() then
     applyCharacterStats(characterBalance:JsonVariation({}))
   }
 
   -- 경험치 획득률
-  local progressionConfig = client:GetVariant("progression-speed")
+  local progressionConfig = client:GetToggle("progression-speed")
   if progressionConfig:IsEnabled() then
     setXpMultiplier(progressionConfig:NumberVariation(1.0))
   }
@@ -361,7 +359,7 @@ function initializeGameBalance()
 
 ```lua
 function configureMatchmaking()
-  local matchmakingVariant = client:GetVariant("matchmaking-algorithm")
+  local matchmakingVariant = client:GetToggle("matchmaking-algorithm")
 
   if matchmakingVariant:IsEnabled() then
     local algorithm = matchmakingVariant:StringVariation("skill-based")
@@ -459,7 +457,7 @@ end
 -- 명시적 동기화 모드로 클라이언트 초기화
 local client = ToggletClient.New({
   -- 기본 구성...
-  useExplicitSyncMode = true
+  explicitSyncMode = true
 })
 
 -- 게임 세션 시작 시 플래그 동기화
@@ -937,7 +935,7 @@ end
 -- 좋은 예: 명시적 동기화 모드로 변경 시점 제어
 local client = ToggletClient.New({
   -- 기본 구성...
-  useExplicitSyncMode = true
+  explicitSyncMode = true
 })
 
 -- 적절한 시점에만 동기화
@@ -1269,7 +1267,7 @@ local client = ToggletClient.New({
 client:On(Togglet.Events.IMPRESSION, function(event)
   -- 노출 이벤트 처리
   print("피처 플래그 노출:", event.featureName, "활성화:", event.enabled)
-  
+
   -- 분석 시스템으로 이벤트 전송
   trackAnalyticsEvent("feature_impression", {
     featureName = event.featureName,

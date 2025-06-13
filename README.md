@@ -51,10 +51,10 @@ You should wait for the client's `ready` or `init` events before you start worki
 
 ```lua
 client:On(Togglet.Events.READY, function()
-  if client:IsEnabled('my-feature') then
-    print('my-feature is enabled')
+  if client:IsEnabled("my-feature") then
+    print("my-feature is enabled")
   else
-    print('my-feature is disabled')
+    print("my-feature is disabled")
   end
 end)
 ```
@@ -66,16 +66,16 @@ The difference between the events is explained in the [Available events](#availa
 Once the client is ready, you can start checking features in your application. Use the `IsEnabled` method to check the state of any feature you want:
 
 ```lua
-client:IsEnabled('my-feature')
+client:IsEnabled("my-feature")
 ```
 
 You can use the `GetToggle` method to get a toggle proxy for an **enabled feature that has variants**. If the feature is disabled, you will get back a disabled toggle proxy.
 
 ```lua
-local toggle = client:GetToggle('my-feature')
+local toggle = client:GetToggle("my-feature")
 
 if toggle:IsEnabled() then
-  local color = toggle:StringVariation('blue') -- default value: 'blue'
+  local color = toggle:StringVariation("blue") -- default value: "blue"
   setButtonColor(color)
 end
 ```
@@ -83,10 +83,10 @@ end
 You can also access the payload associated with the variant:
 
 ```lua
-local toggle = client:GetToggle('my-feature')
+local toggle = client:GetToggle("my-feature")
 local payload = toggle:JsonVariation({})
 
-if payload.type == 'special' then
+if payload.type == "special" then
   -- do something with the payload
   print("Payload value:", payload.value)
 end
@@ -100,15 +100,15 @@ The Togglet context is used to evaluate features against attributes of the curre
 -- Used to set multiple context fields
 client:SetContextFields({
   userId = '1233',
-  sessionId = 'session-456',
-  customProperty = 'value'
+  remoteAddress = "127.0.0.1",
+  customProperty = "value"
 })
 
 -- Used to update a single field on the context
-client:SetContextField('userId', '4141')
+client:SetContextField("userId", "4141")
 
 -- Used to remove a field from the context
-client:RemoveContextField('customProperty')
+client:RemoveContextField("customProperty")
 ```
 
 ### Alternative: Using ToggletClientBuilder
@@ -131,7 +131,7 @@ local client = ToggletClientBuilder.New("your-app-name")
 
 -- Offline mode configuration
 local offlineClient = ToggletClientBuilder.New("your-app-name")
-    :Offline(true)
+    :OfflineMode(true)
     :Bootstrap({
       { name = "feature-a", enabled = true },
       { name = "feature-b", enabled = false }
@@ -151,17 +151,17 @@ The Togglet SDK takes the following options:
 | `clientKey` | yes | n/a | The client key to be used for authentication |
 | `appName` | yes | n/a | The name of the application using this SDK. Will be used as part of the metrics sent to server |
 | `request` | yes | n/a | HTTP request function for making API calls |
-| `refreshInterval` | no | 30 | How often, in seconds, the SDK should check for updated toggle configuration. If set to 0 will disable checking for updates |
+| `refreshInterval` | no | 15 | How often, in seconds, the SDK should check for updated toggle configuration. If set to 0 will disable checking for updates |
 | `disableRefresh` | no | false | If set to true, the client will not check for updated toggle configuration |
 | `metricsInterval` | no | 60 | How often, in seconds, the SDK should send usage metrics back to server |
 | `disableMetrics` | no | false | Set this option to `true` if you want to disable usage metrics |
 | `storageProvider` | no | `InMemoryStorageProvider` | Allows you to inject a custom storage provider |
 | `bootstrap` | no | `nil` | Allows you to bootstrap the cached feature toggle configuration |
 | `bootstrapOverride` | no | `true` | Should the bootstrap automatically override cached data in the local storage |
-| `offline` | no | `false` | Set to true to run in offline mode (requires bootstrap data) |
-| `useExplicitSyncMode` | no | `false` | Set to true to enable explicit synchronization mode |
+| `offlineMode` | no | `false` | Set to true to run in offline mode (requires bootstrap data) |
+| `explicitSyncMode` | no | `false` | Set to true to enable explicit synchronization mode |
 | `environment` | no | `nil` | Environment name (e.g., "production", "development") |
-| `enableDevMode` | no | `false` | Enable development mode for additional logging |
+| `devMode` | no | `false` | Enable development mode for additional logging |
 | `loggerFactory` | no | `nil` | Custom logger factory for logging |
 | `customHeaders` | no | `{}` | Additional headers to use when making HTTP requests |
 | `experimental` | no | `{}` | Experimental features configuration |
@@ -172,7 +172,7 @@ The client is also an event emitter. This means that your code can subscribe to 
 
 ```lua
 client:On(Togglet.Events.UPDATE, function()
-  local myToggle = client:IsEnabled('my-feature')
+  local myToggle = client:IsEnabled("my-feature")
   -- do something useful
 end)
 ```
