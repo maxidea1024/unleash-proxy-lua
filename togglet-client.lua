@@ -16,6 +16,10 @@
 -- FIXME
 --    Start/Stop 반복 사이클이 동작하는지 확인(변수 초기화, 콜백 이슈들)
 
+-- FIXME
+--    currentTime은 fetchToggles 요청시 슬며시 전달하는 방법도 좋을듯하다.
+--    단, 실제 컨텍스트 변경은 필요없고, 투명하게 전달하도록 하자.
+
 local Json = require("framework.3rdparty.togglet.dkjson")
 local Timer = require("framework.3rdparty.togglet.timer")
 local MetricsReporter = require("framework.3rdparty.togglet.metrics-reporter")
@@ -1191,6 +1195,13 @@ function M:fetchToggles(retry)
   if not retry then
     self.fetchingContextVersion = self.contextVersion
     self.fetchingContext = Util.Clone(self.context)
+
+    -- Transparently pass current time during fetch
+    if not self.fetchingContext.currentTime then
+       -- 클라이언트가 보내는 값이므로 신뢰할수 없다.
+       -- flag 평가를 받은 서버에서 서버의 현재시각을 기준으로 처리하는게 좋겠다.
+      self.fetchingContext.currentTime = Util.Iso8601UtcNowWithMSec()
+    end
   end
 
   local isPOST = self.usePOSTrequests
@@ -1211,7 +1222,7 @@ function M:fetchToggles(retry)
     headers["Content-Length"] = tostring(body and #body or 0)
   end
 
-  -- TODO request cancel 기능을 추가해야함
+  -- TODO Need to add request cancellation functionality
   local promise = Promise.New()
   self.request(url, method, headers, body, function(response)
     self:handleFetchResponse(url, method, headers, body, response, promise)
